@@ -2,8 +2,11 @@
 // One interface + platform factory via conditional imports.
 
 import 'local_store_stub.dart'
-  if (dart.library.html) 'local_store_web.dart'
-  if (dart.library.io) 'local_store_io.dart';
+    if (dart.library.html) 'local_store_web.dart'
+    if (dart.library.io) 'local_store_io.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'cloud_store.dart';
+import 'syncing_store.dart';
 
 abstract class LocalStore {
   /// Optional init hook (file path prep, etc.)
@@ -16,6 +19,20 @@ abstract class LocalStore {
   Future<Map<String, dynamic>> loadJson();
 }
 
+LocalStore createPlatformLocalStore() => createLocalStoreImpl();
+
 /// Returns the platform-specific implementation.
 // Implemented in *_web.dart / *_io.dart / stub.
-LocalStore createLocalStore() => createLocalStoreImpl();
+LocalStore createLocalStore() {
+  try {
+    final authUser = Supabase.instance.client.auth.currentUser;
+    final base = createPlatformLocalStore();
+    if (authUser != null) {
+      return SyncingStore(local: base, cloud: CloudStore());
+    }
+    return base;
+  } catch (_) {
+    // Supabase not initialized yet; fall back to local.
+    return createPlatformLocalStore();
+  }
+}

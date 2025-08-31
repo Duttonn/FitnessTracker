@@ -4,6 +4,7 @@ import '../data/local_store_interface.dart';
 import 'package:flutter_fitness_app/models/ingredient.dart';
 import 'package:flutter_fitness_app/models/meal_def.dart';
 import 'package:openfoodfacts/openfoodfacts.dart' as off;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 enum FoodsTab { ingredients, meals } // added
 
@@ -13,12 +14,14 @@ class Goals {
   double fat;
   double fiber;
   int kcal;
+  DateTime? updatedAt; // sync metadata
   Goals({
     this.protein = 120,
     this.carbs = 250,
     this.fat = 65,
     this.fiber = 30,
     this.kcal = 2100,
+    this.updatedAt,
   });
   Map<String, dynamic> toJson() => {
     'protein': protein,
@@ -26,6 +29,7 @@ class Goals {
     'fat': fat,
     'fiber': fiber,
     'kcal': kcal,
+    'updatedAt': updatedAt?.toIso8601String(),
   };
   factory Goals.fromJson(Map m) => Goals(
     protein: (m['protein'] ?? 120).toDouble(),
@@ -33,6 +37,9 @@ class Goals {
     fat: (m['fat'] ?? 65).toDouble(),
     fiber: (m['fiber'] ?? 30).toDouble(),
     kcal: (m['kcal'] ?? 2100).toInt(),
+    updatedAt: m['updatedAt'] != null
+        ? DateTime.tryParse(m['updatedAt'])
+        : null,
   );
 }
 
@@ -203,10 +210,23 @@ class AppState extends ChangeNotifier {
   Map<String, GoalPreset> goalPresets = {}; // id -> preset
   String? activeGoalPresetId;
   FoodsTab _foodsTab = FoodsTab.ingredients; // current foods screen tab
-  final LocalStore _store = createLocalStore();
+  List<int> activeWeekdays = List.generate(
+    7,
+    (i) => i,
+  ); // 0=Mon? using existing order
+  LocalStore _store = createLocalStore();
+  // Expose whether cloud sync active (auth present)
+  bool get isCloudSyncing => Supabase.instance.client.auth.currentUser != null;
   AppState() {
     _initStore();
   }
+  Future<void> refreshStoreForAuthChange() async {
+    final newStore = createLocalStore();
+    _store = newStore;
+    await _store.init();
+    await load();
+  }
+
   Future<void> _initStore() async {
     await _store.init();
     await load();
@@ -278,6 +298,7 @@ class AppState extends ChangeNotifier {
   void setGoals(Goals g, {bool updateActivePreset = true}) {
     goals = g;
     goals.kcal = (g.protein * 4 + g.carbs * 4 + g.fat * 9).round();
+    goals.updatedAt = DateTime.now();
     if (updateActivePreset && activeGoalPresetId != null) {
       final id = activeGoalPresetId!;
       final preset = goalPresets[id];
@@ -385,6 +406,7 @@ class AppState extends ChangeNotifier {
     'goalPresets': goalPresets.map((k, v) => MapEntry(k, v.toJson())),
     'activeGoalPresetId': activeGoalPresetId,
     'barcodeCache': barcodeCache,
+    'activeWeekdays': activeWeekdays,
   };
   void _fromJson(Map m) {
     goals = Goals.fromJson(m['goals'] ?? {});
@@ -450,6 +472,10 @@ class AppState extends ChangeNotifier {
         if (k is String && v is String) barcodeCache[k] = v;
       });
     }
+    final aw = m['activeWeekdays'];
+    if (aw is List) {
+      activeWeekdays = aw.whereType<int>().toList();
+    }
   }
 
   static String _uuid() => DateTime.now().microsecondsSinceEpoch.toString();
@@ -486,7 +512,7 @@ class AppState extends ChangeNotifier {
   // Ingredient CRUD
   String addIngredient(Ingredient ing) {
     final id = ing.id.isEmpty ? _uuid() : ing.id;
-    ingredients[id] = ing.copyWith(id: id);
+    ingredients[id] = ing.copyWith(id: id, updatedAt: DateTime.now());
     _save();
     notifyListeners();
     return id;
@@ -494,7 +520,7 @@ class AppState extends ChangeNotifier {
 
   void updateIngredient(Ingredient ing) {
     if (!ingredients.containsKey(ing.id)) return;
-    ingredients[ing.id] = ing;
+    ingredients[ing.id] = ing.copyWith(updatedAt: DateTime.now());
     _save();
     notifyListeners();
   }
@@ -507,7 +533,7 @@ class AppState extends ChangeNotifier {
 
   String addMeal(MealDef meal) {
     final id = meal.id.isEmpty ? _uuid() : meal.id;
-    meals[id] = meal.copyWith(id: id);
+    meals[id] = meal.copyWith(id: id, updatedAt: DateTime.now());
     _save();
     notifyListeners();
     return id;
@@ -515,7 +541,7 @@ class AppState extends ChangeNotifier {
 
   void updateMeal(MealDef meal) {
     if (!meals.containsKey(meal.id)) return;
-    meals[meal.id] = meal;
+    meals[meal.id] = meal.copyWith(updatedAt: DateTime.now());
     _save();
     notifyListeners();
   }
@@ -794,6 +820,7 @@ class AppState extends ChangeNotifier {
           source: i.source,
           barcode: i.barcode,
           lastFetchedAt: DateTime.now(),
+          updatedAt: DateTime.now(),
         );
         ingredients[existing.id] = updated;
         barcodeCache[i.barcode!] = existing.id;
@@ -803,7 +830,11 @@ class AppState extends ChangeNotifier {
       }
     }
     final id = i.id.isEmpty ? _uuid() : i.id;
-    ingredients[id] = i.copyWith(id: id, lastFetchedAt: DateTime.now());
+    ingredients[id] = i.copyWith(
+      id: id,
+      lastFetchedAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
     if (i.barcode != null) {
       barcodeCache[i.barcode!] = id;
     }

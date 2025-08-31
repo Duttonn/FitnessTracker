@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // ⬅️ NEW
+
 import 'package:flutter_fitness_app/theme.dart';
 import 'package:flutter_fitness_app/ui/screens/dashboard_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/logs_screen.dart';
@@ -11,11 +13,40 @@ import 'package:flutter_fitness_app/router.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
 import 'package:flutter_fitness_app/ui/widgets/vision_nav_bar.dart';
 
-void main() {
+// Read from --dart-define at build/run time
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+const _supabaseAnon = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue: '',
+);
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Edge-to-edge status bar style
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent),
   );
+
+  // Initialize Supabase (if keys are provided)
+  if (_supabaseUrl.isNotEmpty && _supabaseAnon.isNotEmpty) {
+    await Supabase.initialize(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnon,
+      authOptions: const FlutterAuthClientOptions(
+        autoRefreshToken: true,
+        // persistSession removed (always enabled by default in >=2.10.0)
+      ),
+    );
+  } else {
+    // Not fatal: the app can still run locally/offline without Supabase.
+    // (You’ll pass keys via --dart-define; see your build/run command.)
+    debugPrint(
+      '[Supabase] Missing SUPABASE_URL / SUPABASE_ANON_KEY dart-defines. '
+      'Running without remote backend.',
+    );
+  }
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppState(), // self-initializes (init + load + timer)
@@ -95,7 +126,6 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold> {
   ];
 
   void _openFoodsTab(int tabIndex) {
-    // Animate to foods page then set tab; using post-frame ensures state is mounted.
     if (index != 4) {
       setState(() => index = 4);
       _pageController.animateToPage(
@@ -117,7 +147,6 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    // Enable edge-to-edge so we can draw under system gesture area
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     return Scaffold(
       extendBody: true,

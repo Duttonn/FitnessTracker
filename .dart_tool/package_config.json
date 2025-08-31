@@ -2,6 +2,30 @@
   "configVersion": 2,
   "packages": [
     {
+      "name": "app_links",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/app_links-6.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "app_links_linux",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/app_links_linux-1.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "app_links_platform_interface",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/app_links_platform_interface-2.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "app_links_web",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/app_links_web-1.0.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
       "name": "async",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/async-2.13.0",
       "packageUri": "lib/",
@@ -56,6 +80,12 @@
       "languageVersion": "3.7"
     },
     {
+      "name": "file",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/file-7.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "fl_chart",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/fl_chart-0.68.0",
       "packageUri": "lib/",
@@ -86,10 +116,28 @@
       "languageVersion": "3.8"
     },
     {
+      "name": "functions_client",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/functions_client-2.4.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "google_fonts",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/google_fonts-6.3.0",
       "packageUri": "lib/",
       "languageVersion": "2.14"
+    },
+    {
+      "name": "gotrue",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/gotrue-2.14.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "gtk",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/gtk-2.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "http",
@@ -116,6 +164,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "jwt_decode",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/jwt_decode-0.3.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "leak_tracker",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/leak_tracker-11.0.1",
       "packageUri": "lib/",
@@ -140,6 +194,12 @@
       "languageVersion": "3.1"
     },
     {
+      "name": "logging",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/logging-1.3.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "matcher",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/matcher-0.12.17",
       "packageUri": "lib/",
@@ -156,6 +216,12 @@
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/meta-1.16.0",
       "packageUri": "lib/",
       "languageVersion": "2.12"
+    },
+    {
+      "name": "mime",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/mime-2.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
     },
     {
       "name": "mobile_scanner",
@@ -230,10 +296,76 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "postgrest",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/postgrest-2.4.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "provider",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/provider-6.1.5+1",
       "packageUri": "lib/",
       "languageVersion": "2.12"
+    },
+    {
+      "name": "realtime_client",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/realtime_client-2.5.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "retry",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/retry-3.1.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
+      "name": "rxdart",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/rxdart-0.28.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "shared_preferences",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences-2.5.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "shared_preferences_android",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_android-2.4.12",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
+      "name": "shared_preferences_foundation",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_foundation-2.5.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "shared_preferences_linux",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_linux-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "shared_preferences_platform_interface",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_platform_interface-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
+    },
+    {
+      "name": "shared_preferences_web",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_web-2.4.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "shared_preferences_windows",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/shared_preferences_windows-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "sky_engine",
@@ -254,6 +386,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "storage_client",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/storage_client-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "stream_channel",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/stream_channel-2.1.4",
       "packageUri": "lib/",
@@ -264,6 +402,18 @@
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/string_scanner-1.4.1",
       "packageUri": "lib/",
       "languageVersion": "3.1"
+    },
+    {
+      "name": "supabase",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/supabase-2.9.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "supabase_flutter",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/supabase_flutter-2.10.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
     },
     {
       "name": "term_glyph",
@@ -284,6 +434,60 @@
       "languageVersion": "3.5"
     },
     {
+      "name": "url_launcher",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher-6.3.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "url_launcher_android",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_android-6.3.18",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
+      "name": "url_launcher_ios",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_ios-6.3.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
+      "name": "url_launcher_linux",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_linux-3.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "url_launcher_macos",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_macos-3.2.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.7"
+    },
+    {
+      "name": "url_launcher_platform_interface",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_platform_interface-2.3.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
+    },
+    {
+      "name": "url_launcher_web",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_web-2.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "url_launcher_windows",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/url_launcher_windows-3.1.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "uuid",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/uuid-3.0.7",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "vector_math",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/vector_math-2.2.0",
       "packageUri": "lib/",
@@ -302,10 +506,28 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "web_socket",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/web_socket-1.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "web_socket_channel",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/web_socket_channel-3.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
       "name": "xdg_directories",
       "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/xdg_directories-1.1.0",
       "packageUri": "lib/",
       "languageVersion": "3.3"
+    },
+    {
+      "name": "yet_another_json_isolate",
+      "rootUri": "file:///Users/ndn18/.pub-cache/hosted/pub.dev/yet_another_json_isolate-2.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "flutter_fitness_app",

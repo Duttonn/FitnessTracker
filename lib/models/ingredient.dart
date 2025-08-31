@@ -16,6 +16,7 @@ class Ingredient {
   final String? imageUrl;
   final String source; // 'manual' | 'openfoodfacts'
   final DateTime? lastFetchedAt;
+  final DateTime? updatedAt; // last local modification (for sync)
   const Ingredient({
     this.id = '',
     required this.name,
@@ -30,6 +31,7 @@ class Ingredient {
     this.imageUrl,
     this.source = 'manual',
     this.lastFetchedAt,
+    this.updatedAt,
   });
   Ingredient copyWith({
     String? id,
@@ -45,6 +47,7 @@ class Ingredient {
     String? imageUrl,
     String? source,
     DateTime? lastFetchedAt,
+    DateTime? updatedAt,
   }) => Ingredient(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -59,6 +62,7 @@ class Ingredient {
     imageUrl: imageUrl ?? this.imageUrl,
     source: source ?? this.source,
     lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -74,6 +78,7 @@ class Ingredient {
     'imageUrl': imageUrl,
     'source': source,
     'lastFetchedAt': lastFetchedAt?.toIso8601String(),
+    'updatedAt': updatedAt?.toIso8601String(),
   };
   factory Ingredient.fromJson(Map<String, dynamic> m) => Ingredient(
     id: m['id'] ?? '',
@@ -90,6 +95,9 @@ class Ingredient {
     source: (m['source'] ?? 'manual') as String,
     lastFetchedAt: m['lastFetchedAt'] != null
         ? DateTime.tryParse(m['lastFetchedAt'])
+        : null,
+    updatedAt: m['updatedAt'] != null
+        ? DateTime.tryParse(m['updatedAt'])
         : null,
   );
   // Convenience macro scaling

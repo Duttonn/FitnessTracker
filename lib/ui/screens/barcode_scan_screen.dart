@@ -7,9 +7,9 @@ class BarcodeScanScreen extends StatefulWidget {
 
   // Preserve existing helper used elsewhere.
   static Future<String?> pick(BuildContext context) => Navigator.push<String>(
-        context,
-        MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
-      );
+    context,
+    MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
+  );
 
   @override
   State<BarcodeScanScreen> createState() => _BarcodeScanScreenState();
@@ -60,9 +60,9 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
 
   void _useThisCode() {
     if (_lastCode == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No code detected yet')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No code detected yet')));
       return;
     }
     Navigator.of(context).pop(_lastCode);
@@ -142,7 +142,7 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
             ),
           ),
 
-            if (_hasPermission) overlay,
+          if (_hasPermission) overlay,
         ],
       ),
     );

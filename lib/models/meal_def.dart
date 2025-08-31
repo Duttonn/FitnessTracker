@@ -67,28 +67,33 @@ class MealDef {
   final String name;
   final List<MealPart> parts;
   final bool favorite;
+  final DateTime? updatedAt; // for sync conflict resolution
   MealDef({
     this.id = '',
     required this.name,
     required this.parts,
     this.favorite = false,
+    this.updatedAt,
   });
   MealDef copyWith({
     String? id,
     String? name,
     List<MealPart>? parts,
     bool? favorite,
+    DateTime? updatedAt,
   }) => MealDef(
     id: id ?? this.id,
     name: name ?? this.name,
     parts: parts ?? this.parts,
     favorite: favorite ?? this.favorite,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     'parts': parts.map((p) => p.toJson()).toList(),
     'favorite': favorite,
+    'updatedAt': updatedAt?.toIso8601String(),
   };
   factory MealDef.fromJson(Map<String, dynamic> m) => MealDef(
     id: m['id'],
@@ -97,6 +102,9 @@ class MealDef {
         .map((e) => MealPart.fromJson(Map<String, dynamic>.from(e)))
         .toList(),
     favorite: (m['favorite'] ?? false) as bool,
+    updatedAt: m['updatedAt'] != null
+        ? DateTime.tryParse(m['updatedAt'])
+        : null,
   );
 
   Macros totals(Map<String, Ingredient> ingredients) {
