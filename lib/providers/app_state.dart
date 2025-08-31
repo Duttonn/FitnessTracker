@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../data/local_store.dart';
+import '../data/local_store_interface.dart';
 import 'package:flutter_fitness_app/models/ingredient.dart';
 import 'package:flutter_fitness_app/models/meal_def.dart';
 import 'package:openfoodfacts/openfoodfacts.dart' as off;
@@ -203,6 +203,15 @@ class AppState extends ChangeNotifier {
   Map<String, GoalPreset> goalPresets = {}; // id -> preset
   String? activeGoalPresetId;
   FoodsTab _foodsTab = FoodsTab.ingredients; // current foods screen tab
+  final LocalStore _store = createLocalStore();
+  AppState() {
+    _initStore();
+  }
+  Future<void> _initStore() async {
+    await _store.init();
+    await load();
+    startRolloverTimer();
+  }
 
   static String dayKeyFrom(DateTime t) {
     final adj = t.subtract(const Duration(hours: 4));
@@ -354,15 +363,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    final m = await LocalStore.readState();
-    if (m != null) {
+    final m = await _store.loadJson();
+    if (m.isNotEmpty) {
       _fromJson(m);
     }
     _lastDayKey = dayKeyFrom(DateTime.now());
     notifyListeners();
   }
 
-  Future<void> _save() async => LocalStore.writeState(toJson());
+  Future<void> _save() async => _store.saveJson(toJson());
 
   Map<String, dynamic> toJson() => {
     'goals': goals.toJson(),

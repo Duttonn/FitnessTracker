@@ -18,9 +18,7 @@ void main() {
   );
   runApp(
     ChangeNotifierProvider(
-      create: (_) => AppState()
-        ..load()
-        ..startRolloverTimer(),
+      create: (_) => AppState(), // self-initializes (init + load + timer)
       child: const FitnessApp(),
     ),
   );

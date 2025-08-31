@@ -1,37 +1,37 @@
-import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 class BarcodeScanScreen extends StatefulWidget {
   const BarcodeScanScreen({super.key});
 
+  // Preserve existing helper used elsewhere.
   static Future<String?> pick(BuildContext context) => Navigator.push<String>(
-    context,
-    MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
-  );
+        context,
+        MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
+      );
 
   @override
   State<BarcodeScanScreen> createState() => _BarcodeScanScreenState();
 }
 
 class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
-  final MobileScannerController _controller = MobileScannerController(
-    formats: const [
-      BarcodeFormat.ean13,
-      BarcodeFormat.ean8,
-      BarcodeFormat.upcA,
-    ],
-    facing: CameraFacing.back,
-    detectionSpeed: DetectionSpeed.noDuplicates, // avoid spam
-    autoStart: true,
-  );
+  late final MobileScannerController _controller;
+  bool _hasPermission = !kIsWeb; // On web we request explicitly.
+  bool _isStarting = false;
+  String? _permissionError;
+  String? _lastCode; // recent detected code
 
-  bool _torchOn = false;
-  final bool _scanningPaused = false; // made final (never mutated)
-  String? _lastCode;
-  DateTime _lastShown = DateTime.fromMillisecondsSinceEpoch(0);
-  String? _lastDetectedCode;
-  bool _handled = false; // prevents multiple pops
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+      // On mobile auto-starts via plugin; on web we'll manual start().
+      autoStart: !kIsWeb,
+    );
+  }
 
   @override
   void dispose() {
@@ -39,269 +39,171 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     super.dispose();
   }
 
-  void _onDetect(String code) {
-    if (_handled) return; // already finished
-    if (_lastDetectedCode != null) return; // already showing UI
-    setState(() => _lastDetectedCode = code);
-    _controller.stop();
+  Future<void> _startCameraWeb() async {
+    if (!kIsWeb) return;
+    setState(() {
+      _permissionError = null;
+      _isStarting = true;
+    });
+    try {
+      await _controller.start(); // must be user gesture
+      setState(() => _hasPermission = true);
+    } catch (e) {
+      setState(() {
+        _permissionError = 'Camera permission was denied or not available.';
+        _hasPermission = false;
+      });
+    } finally {
+      if (mounted) setState(() => _isStarting = false);
+    }
   }
 
-  Future<void> _useCode() async {
-    if (_handled) return;
-    final code = _lastDetectedCode;
-    if (code == null) return;
-    _handled = true;
-    try {
-      await _controller.stop();
-    } catch (_) {}
-    try {
-      await _controller.dispose();
-    } catch (_) {}
-    if (!mounted) return;
-    Navigator.of(context).pop(code);
-  }
-
-  Future<void> _scanAgain() async {
-    if (_handled) return; // after handled we don't allow rescans
-    if (!mounted) return;
-    setState(() => _lastDetectedCode = null);
-    try {
-      await _controller.start();
-    } catch (_) {}
-  }
-
-  void _handleDetection(BarcodeCapture cap) {
-    if (_handled) return; // stop processing
-    if (_scanningPaused) return;
-    final b = cap.barcodes.firstOrNull;
-    final val = b?.rawValue?.trim();
-    if (val == null || val.isEmpty) return;
-
-    // Simple debounce so the bottom sheet doesn't pop multiple times.
-    final now = DateTime.now();
-    if (val == _lastCode && now.difference(_lastShown).inSeconds < 2) return;
-    _lastCode = val;
-    _lastShown = now;
-
-    _onDetect(val);
+  void _useThisCode() {
+    if (_lastCode == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No code detected yet')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(_lastCode);
   }
 
   @override
   Widget build(BuildContext context) {
+    final overlay = Container(
+      alignment: Alignment.bottomCenter,
+      padding: const EdgeInsets.all(12),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _lastCode == null
+                    ? 'Point camera at a barcode'
+                    : 'Code: ${_lastCode}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: _useThisCode,
+              child: const Text('Use this code'),
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            // Ensures the camera always covers the screen (no black bands).
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return ClipRect(
-                  child: FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                      child: MobileScanner(
-                        controller: _controller,
-                        onDetect: _handleDetection,
-                      ),
-                    ),
-                  ),
-                );
+      appBar: AppBar(
+        title: const Text('Scan a Barcode'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (kIsWeb && !_hasPermission)
+            _WebPermissionGate(
+              isStarting: _isStarting,
+              error: _permissionError,
+              onEnable: _startCameraWeb,
+            )
+          else
+            MobileScanner(
+              controller: _controller,
+              onDetect: (capture) {
+                final codes = capture.barcodes;
+                if (codes.isEmpty) return;
+                final raw = codes.first.rawValue;
+                if (raw == null || raw.isEmpty) return;
+                setState(() => _lastCode = raw);
               },
             ),
 
-            // Scrim + cutout overlay
-            const _ScannerOverlay(),
-
-            // Top controls
-            Positioned(
-              left: 8,
-              right: 8,
-              top: 8,
-              child: Row(
-                children: [
-                  IconButton.filledTonal(
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStatePropertyAll(
-                        Colors.black.withValues(alpha: .35),
-                      ),
-                    ),
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
+          // Optional scan frame
+          IgnorePointer(
+            child: Align(
+              alignment: Alignment.center,
+              child: Container(
+                width: 280,
+                height: 180,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.9),
+                    width: 2,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: .35),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Align the barcode in the frame',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Supported: EAN-13, UPC-A/E, EAN-8',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStatePropertyAll(
-                        Colors.black.withValues(alpha: .35),
-                      ),
-                    ),
-                    icon: Icon(
-                      _torchOn ? Icons.flash_on : Icons.flash_off,
-                      color: Colors.white,
-                    ),
-                    onPressed: () async {
-                      await _controller.toggleTorch();
-                      setState(
-                        () => _torchOn = !_torchOn,
-                      ); // fallback: API lacks torchState getter in this version
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton.filledTonal(
-                    style: ButtonStyle(
-                      backgroundColor: WidgetStatePropertyAll(
-                        Colors.black.withValues(alpha: .35),
-                      ),
-                    ),
-                    icon: const Icon(Icons.cameraswitch, color: Colors.white),
-                    onPressed: () => _controller.switchCamera(),
-                  ),
-                ],
+                ),
               ),
             ),
+          ),
 
-            // Bottom action panel
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: _lastDetectedCode == null
-                    ? const SizedBox.shrink()
-                    : Container(
-                        key: const ValueKey('actions'),
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: .85),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Barcode detected',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(color: Colors.white),
-                            ),
-                            const SizedBox(height: 6),
-                            SelectableText(
-                              _lastDetectedCode!,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: FilledButton(
-                                    onPressed: _useCode,
-                                    child: const Text('Use this code'),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _scanAgain,
-                                    child: const Text('Scan again'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+            if (_hasPermission) overlay,
+        ],
+      ),
+    );
+  }
+}
+
+class _WebPermissionGate extends StatelessWidget {
+  final bool isStarting;
+  final String? error;
+  final VoidCallback onEnable;
+  const _WebPermissionGate({
+    required this.isStarting,
+    required this.error,
+    required this.onEnable,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.photo_camera, size: 64, color: Colors.white70),
+            const SizedBox(height: 16),
+            const Text(
+              'Enable Camera',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'To scan a barcode, allow camera access. You can change this later in your browser settings.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 12),
+              Text(error!, style: const TextStyle(color: Colors.orangeAccent)),
+            ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: isStarting ? null : onEnable,
+              child: Text(isStarting ? 'Starting…' : 'Allow Camera'),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Tip: On iPhone/iPad, this requires Safari over HTTPS.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ],
         ),
       ),
     );
   }
-}
-
-class _ScannerOverlay extends StatelessWidget {
-  const _ScannerOverlay();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(painter: _OverlayPainter(), size: Size.infinite),
-    );
-  }
-}
-
-class _OverlayPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cutoutWidth = size.width * 0.78;
-    final cutoutHeight = cutoutWidth * 0.56; // barcode-ish aspect
-    final r = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(size.width / 2, size.height * 0.42),
-        width: cutoutWidth,
-        height: cutoutHeight,
-      ),
-      const Radius.circular(16),
-    );
-
-    // Dim everything
-    final scrim = Path()..addRect(Offset.zero & size);
-    final hole = Path()..addRRect(r);
-    final path = Path.combine(PathOperation.difference, scrim, hole);
-
-    canvas.drawPath(path, Paint()..color = Colors.black.withValues(alpha: .55));
-
-    // White border
-    final border = Paint()
-      ..color = Colors.white.withValues(alpha: .9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    canvas.drawRRect(r, border);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
