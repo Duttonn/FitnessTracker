@@ -9,11 +9,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class QuickAddSheet extends StatefulWidget {
   final Meal initialMeal;
   final AppState appState; // injected
+  final MacroEntry? existing; // null => create new, non-null => edit
   const QuickAddSheet({
     super.key,
     required this.initialMeal,
     required this.appState,
+    this.existing,
   });
+  factory QuickAddSheet.edit({required MacroEntry entry, required AppState appState}) => QuickAddSheet(
+        initialMeal: entry.meal,
+        appState: appState,
+        existing: entry,
+      );
   @override
   State<QuickAddSheet> createState() => _QuickAddSheetState();
 }
@@ -25,6 +32,20 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
   final _fat = TextEditingController();
   final _fiber = TextEditingController();
   final _title = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existing != null) {
+      final e = widget.existing!;
+      meal = e.meal;
+      _protein.text = e.protein.toStringAsFixed(0);
+      _carbs.text = e.carbs.toStringAsFixed(0);
+      _fat.text = e.fat.toStringAsFixed(0);
+      _fiber.text = e.fiber.toStringAsFixed(0);
+      _title.text = e.title ?? '';
+    }
+  }
 
   double _parse(TextEditingController c) => double.tryParse(c.text) ?? 0;
 
@@ -51,7 +72,6 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
     final f = _parse(_fat);
     final fi = _parse(_fiber);
     final kcal = (p * 4 + c * 4 + f * 9).round();
-    // Use injected AppState; if user logged out meanwhile, session null => block
     if (Supabase.instance.client.auth.currentSession == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -65,31 +85,49 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
     }
     final state = widget.appState;
     final dayKey = AppState.dayKeyFrom(DateTime.now());
-    final id = state.generateId();
-    final entry = MacroEntry(
-      id: id,
-      dayKey: dayKey,
-      createdAt: DateTime.now(),
-      meal: meal,
-      protein: p,
-      carbs: c,
-      fat: f,
-      fiber: fi,
-      kcal: kcal,
-      title: _title.text.trim().isEmpty ? 'Quick Add' : _title.text.trim(),
-    );
-    state.addEntry(entry);
-    HapticFeedback.lightImpact();
-    Navigator.pop(context, meal);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Added. UNDO'),
-        action: SnackBarAction(
-          label: 'UNDO',
-          onPressed: () => state.deleteEntry(id, dayKey),
+    if (widget.existing == null) {
+      final id = state.generateId();
+      final entry = MacroEntry(
+        id: id,
+        dayKey: dayKey,
+        createdAt: DateTime.now(),
+        meal: meal,
+        protein: p,
+        carbs: c,
+        fat: f,
+        fiber: fi,
+        kcal: kcal,
+        title: _title.text.trim().isEmpty ? 'Quick Add' : _title.text.trim(),
+      );
+      state.addEntry(entry);
+      HapticFeedback.lightImpact();
+      Navigator.pop(context, meal);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Added. UNDO'),
+          action: SnackBarAction(
+            label: 'UNDO',
+            onPressed: () => state.deleteEntry(id, dayKey),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      final existing = widget.existing!;
+      final updated = existing.copyWith(
+        meal: meal,
+        protein: p,
+        carbs: c,
+        fat: f,
+        fiber: fi,
+        kcal: kcal,
+        title: _title.text.trim().isEmpty ? existing.title : _title.text.trim(),
+      );
+      state.updateEntry(updated);
+      Navigator.pop(context, meal);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entry updated')),
+      );
+    }
   }
 
   @override
@@ -117,7 +155,7 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
                     Row(
                       children: [
                         Text(
-                          'Quick Add',
+                          widget.existing == null ? 'Quick Add' : 'Edit Entry',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
@@ -184,7 +222,7 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _submit,
-                        child: const Text('Log Macros'),
+                        child: Text(widget.existing == null ? 'Log Macros' : 'Save Changes'),
                       ),
                     ),
                   ],

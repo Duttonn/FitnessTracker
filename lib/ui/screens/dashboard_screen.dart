@@ -20,6 +20,53 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   MacroViewMode _mode =
       MacroViewMode.remaining; // changed default from consumed
+
+  Future<void> _editEntry(MacroEntry entry) async {
+    final appState = context.read<AppState>();
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (c) => QuickAddSheet.edit(entry: entry, appState: appState),
+    );
+  }
+
+  Future<void> _deleteEntry(MacroEntry entry) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete entry?'),
+            content: const Text('This action cannot be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    final app = context.read<AppState>();
+    app.deleteEntry(entry.id, entry.dayKey);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Entry deleted')),
+    );
+  }
+
+  Widget _recentEntryTile(MacroEntry e) => EntryTile(
+        entry: e,
+        onTap: () => _editEntry(e),
+        onEdit: () => _editEntry(e),
+        onDelete: () => _deleteEntry(e),
+        onDuplicate: () => context.read<AppState>().duplicateEntry(e),
+      );
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -247,7 +294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     )
                   else
-                    ...entries.take(6).map((e) => EntryTile(entry: e)),
+                    ...entries.take(6).map(_recentEntryTile),
                 ],
               ),
             ),
