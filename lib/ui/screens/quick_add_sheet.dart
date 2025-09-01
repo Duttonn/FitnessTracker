@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+// removed provider import
 import 'package:flutter_fitness_app/providers/app_state.dart';
 import 'package:flutter_fitness_app/ui/widgets/segmented_meal_selector.dart';
 import 'package:flutter_fitness_app/theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class QuickAddSheet extends StatefulWidget {
   final Meal initialMeal;
-  const QuickAddSheet({super.key, required this.initialMeal});
+  final AppState appState; // injected
+  const QuickAddSheet({
+    super.key,
+    required this.initialMeal,
+    required this.appState,
+  });
   @override
   State<QuickAddSheet> createState() => _QuickAddSheetState();
 }
@@ -45,7 +51,19 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
     final f = _parse(_fat);
     final fi = _parse(_fiber);
     final kcal = (p * 4 + c * 4 + f * 9).round();
-    final state = context.read<AppState>();
+    // Use injected AppState; if user logged out meanwhile, session null => block
+    if (Supabase.instance.client.auth.currentSession == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please sign in again.'),
+          ),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+    final state = widget.appState;
     final dayKey = AppState.dayKeyFrom(DateTime.now());
     final id = state.generateId();
     final entry = MacroEntry(

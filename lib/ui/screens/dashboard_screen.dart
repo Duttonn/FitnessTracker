@@ -18,7 +18,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  MacroViewMode _mode = MacroViewMode.remaining; // changed default from consumed
+  MacroViewMode _mode =
+      MacroViewMode.remaining; // changed default from consumed
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -258,11 +259,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   static void _openQuickAdd(BuildContext context) {
+    final appState = context.read<AppState>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (c) => const QuickAddSheet(initialMeal: Meal.lunch),
+      builder: (c) =>
+          QuickAddSheet(initialMeal: Meal.lunch, appState: appState),
     );
   }
 }
