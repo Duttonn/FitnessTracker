@@ -14,6 +14,7 @@ import 'package:flutter_fitness_app/ui/screens/foods_screen.dart';
 import 'package:flutter_fitness_app/router.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
 import 'package:flutter_fitness_app/ui/widgets/vision_nav_bar.dart';
+import 'package:flutter_fitness_app/ui/screens/settings_goals_screen.dart'; // added
 
 void showSnack(BuildContext ctx, String msg) {
   ScaffoldMessenger.of(ctx).showSnackBar(
@@ -129,8 +130,8 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
     DashboardScreen(openFoodsTab: _openFoodsTab),
     const LogsScreen(),
     const ProgressScreen(),
-    const GoalsScreen(),
-    FoodsScreen(key: _foodsKey),
+    FoodsScreen(key: _foodsKey), // moved Foods to index 3
+    const SettingsGoalsScreen(), // new combined settings + goals at index 4
   ];
 
   @override
@@ -166,10 +167,10 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
   }
 
   void _openFoodsTab(int tabIndex) {
-    if (index != 4) {
-      setState(() => index = 4);
+    if (index != 3) { // foods now at index 3
+      setState(() => index = 3);
       _pageController.animateToPage(
-        4,
+        3,
         duration: const Duration(milliseconds: 420),
         curve: Curves.easeOutCubic,
       );

@@ -928,4 +928,21 @@ class AppState extends ChangeNotifier {
     _foodsTab = tab;
     notifyListeners();
   }
+
+  // Added: reset state after logout
+  void resetForLogout() {
+    goals = Goals();
+    entriesByDay.clear();
+    weights.clear();
+    foods.clear();
+    ingredients.clear();
+    meals.clear();
+    goalPresets.clear();
+    activeGoalPresetId = null;
+    barcodeCache.clear();
+    _rollTimer?.cancel();
+    _lastDayKey = null;
+    _save();
+    notifyListeners();
+  }
 }

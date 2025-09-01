@@ -13,12 +13,12 @@ class VisionNavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onItemSelected;
 
-  static const _icons = <IconData>[
-    Icons.dashboard_outlined, // 0 Dashboard
-    Icons.list_alt, // 1 Logs
-    Icons.show_chart, // 2 Progress
-    Icons.flag_outlined, // 3 Goals
-    Icons.restaurant_outlined, // 4 Foods
+  static const _items = <_VisionItem>[
+    _VisionItem(icon: Icons.grid_view, label: 'Home'),
+    _VisionItem(icon: Icons.list_rounded, label: 'Logs'),
+    _VisionItem(icon: Icons.bar_chart, label: 'Progress'),
+    _VisionItem(icon: Icons.restaurant, label: 'Foods'),
+    _VisionItem(icon: Icons.settings, label: 'Settings'),
   ];
 
   // Public height for layout helpers
@@ -52,10 +52,12 @@ class VisionNavBar extends StatelessWidget {
               // Removed background highlight pill per request; only icon color indicates selection
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(_icons.length, (i) {
+                children: List.generate(_items.length, (i) {
                   final selected = i == currentIndex;
+                  final item = _items[i];
                   return _NavIcon(
-                    icon: _icons[i],
+                    icon: item.icon,
+                    label: item.label,
                     selected: selected,
                     onTap: () => onItemSelected(i),
                   );
@@ -69,18 +71,27 @@ class VisionNavBar extends StatelessWidget {
   }
 }
 
+class _VisionItem {
+  final IconData icon;
+  final String label;
+  const _VisionItem({required this.icon, required this.label});
+}
+
 class _NavIcon extends StatelessWidget {
   const _NavIcon({
     required this.icon,
+    required this.label,
     required this.selected,
     required this.onTap,
   });
   final IconData icon;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final primary = AppColors.primary;
+    final color = selected ? primary : Colors.black.withValues(alpha: .45);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -88,10 +99,20 @@ class _NavIcon extends StatelessWidget {
         duration: const Duration(milliseconds: 170),
         scale: selected ? 1.0 : 0.86,
         curve: Curves.easeOut,
-        child: Icon(
-          icon,
-          size: 24,
-          color: selected ? primary : Colors.black.withValues(alpha: .45),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ),
     );
