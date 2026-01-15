@@ -1,5 +1,9 @@
 # filepath: netlify.toml
+[build]
+  command = "git clone https://github.com/flutter/flutter.git -b stable --depth 1 && export PATH=$PATH:$PWD/flutter/bin && flutter build web --release --dart-define=SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY"
+  publish = "build/web"
+
 [[redirects]]
-from = "/*"
- to = "/index.html"
- status = 200
+  from = "/*"
+  to = "/index.html"
+  status = 200
