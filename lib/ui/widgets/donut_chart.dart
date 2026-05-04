@@ -52,9 +52,11 @@ class MacroDonutChart extends StatelessWidget {
               ),
               Text(
                 'calories',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white54
+                          : Colors.grey[600],
+                    ),
               ),
             ],
           ),

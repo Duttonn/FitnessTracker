@@ -7,7 +7,6 @@ class MacroProgressBar extends StatelessWidget {
   final Color color;
   final bool compact;
   final String unit;
-  // Added optional override + color for right-side text.
   final String? rightTextOverride;
   final Color? rightTextColor;
   const MacroProgressBar({
@@ -24,9 +23,10 @@ class MacroProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeGoal = goal <= 0 ? 1.0 : goal; // avoid div by zero
+    final safeGoal = goal <= 0 ? 1.0 : goal;
     final pct = (value / safeGoal).clamp(0.0, 1.0);
     final barHeight = compact ? 6.0 : 14.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textStyle = Theme.of(
       context,
     ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600);
@@ -60,7 +60,9 @@ class MacroProgressBar extends StatelessWidget {
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: .1)
+                            : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(50),
                       ),
                     ),

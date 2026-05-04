@@ -9,12 +9,13 @@ import 'package:flutter_fitness_app/theme.dart';
 import 'package:flutter_fitness_app/ui/screens/dashboard_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/logs_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/progress_screen.dart';
-import 'package:flutter_fitness_app/ui/screens/goals_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/foods_screen.dart';
 import 'package:flutter_fitness_app/router.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
+import 'package:flutter_fitness_app/ui/screens/settings_goals_screen.dart';
+import 'package:flutter_fitness_app/ui/daily_checkin_sheet.dart';
+import 'package:flutter_fitness_app/ui/workout/workout_scaffold.dart';
 import 'package:flutter_fitness_app/ui/widgets/vision_nav_bar.dart';
-import 'package:flutter_fitness_app/ui/screens/settings_goals_screen.dart'; // added
 
 void showSnack(BuildContext ctx, String msg) {
   ScaffoldMessenger.of(ctx).showSnackBar(
@@ -106,7 +107,72 @@ class _AuthGateState extends State<AuthGate> {
     if (_session == null) return const _SignInScreen();
     return ChangeNotifierProvider.value(
       value: _appState!,
-      child: const BottomNavScaffold(),
+      child: const _AppRoot(),
+    );
+  }
+}
+
+class _AppRoot extends StatefulWidget {
+  const _AppRoot();
+
+  @override
+  State<_AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<_AppRoot> {
+  bool _checkinShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for AppState load completion, then show checkin if needed.
+    // We can't do this in initState directly because AppState.load() is async
+    // and _lastCheckInKey is null until it finishes — causing a false needsCheckIn.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = context.read<AppState>();
+      if (appState.isLoaded) {
+        _maybeShowCheckin();
+      } else {
+        appState.addListener(_onAppStateLoaded);
+      }
+    });
+  }
+
+  void _onAppStateLoaded() {
+    final appState = context.read<AppState>();
+    if (appState.isLoaded) {
+      appState.removeListener(_onAppStateLoaded);
+      _maybeShowCheckin();
+    }
+  }
+
+  @override
+  void dispose() {
+    // Safety: remove listener if widget is disposed before load completes
+    try {
+      context.read<AppState>().removeListener(_onAppStateLoaded);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  void _maybeShowCheckin() {
+    if (_checkinShown) return;
+    final appState = context.read<AppState>();
+    if (appState.needsCheckIn) {
+      _checkinShown = true;
+      showDailyCheckin(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AppState>(
+      builder: (_, appState, __) {
+        if (appState.isWorkoutMode) {
+          return const WorkoutScaffold();
+        }
+        return const BottomNavScaffold();
+      },
     );
   }
 }
@@ -182,6 +248,7 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
 
   @override
   Widget build(BuildContext context) {
+    final pad = MediaQuery.viewPaddingOf(context).bottom;
     return Scaffold(
       extendBody: true,
       resizeToAvoidBottomInset: false,
@@ -197,17 +264,56 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
             alignment: Alignment.bottomCenter,
             child: VisionNavBar(currentIndex: index, onItemSelected: _goTo),
           ),
+          // Workout gate button — positioned above the nav bar on the right
           Positioned(
-            left: 8,
-            bottom: MediaQuery.of(context).padding.bottom + 64,
-            child: GestureDetector(
-              onLongPress: () async {
-                await Supabase.instance.client.auth.signOut();
-              },
-              child: const SizedBox(width: 1, height: 1),
-            ),
+            bottom: VisionNavBar.kHeight + (pad > 0 ? pad : 8) + 12,
+            right: 20,
+            child: _WorkoutGateButton(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _WorkoutGateButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        appState.enterWorkoutMode();
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C2B),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: .35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.fitness_center_rounded, color: AppColors.primary, size: 17),
+            const SizedBox(width: 7),
+            const Text(
+              'WORKOUT',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -221,10 +327,21 @@ class _SignInScreen extends StatefulWidget {
   State<_SignInScreen> createState() => _SignInScreenState();
 }
 
+/// Returns the appropriate default [Meal] for the current time of day.
+Meal timeAwareMeal() {
+  final h = TimeOfDay.now().hour;
+  if (h < 10) return Meal.breakfast;
+  if (h < 14) return Meal.lunch;
+  if (h < 19) return Meal.dinner;
+  return Meal.snack;
+}
+
 class _SignInScreenState extends State<_SignInScreen> {
   final _email = TextEditingController();
   final _pass = TextEditingController();
   bool _busy = false;
+  bool _showPass = false;
+  bool _awaitingConfirmation = false; // after sign-up, waiting for email confirm
   String? _error;
 
   Future<void> _signIn() async {
@@ -283,7 +400,8 @@ class _SignInScreenState extends State<_SignInScreen> {
       if (!mounted) return;
       if (res.user != null) {
         if (res.user!.emailConfirmedAt == null) {
-          showSnack(context, 'Check your inbox to confirm your email.');
+          // Email confirmation required
+          setState(() => _awaitingConfirmation = true);
         } else {
           showSnack(context, 'Account created — signed in!');
         }
@@ -292,10 +410,10 @@ class _SignInScreenState extends State<_SignInScreen> {
       }
     } on AuthException catch (e) {
       debugPrint('[AUTH][AuthException] ${e.statusCode} ${e.message}');
-      showSnack(context, e.message);
+      setState(() => _error = e.message);
     } catch (e, st) {
       debugPrint('[AUTH][Unknown] $e\n$st');
-      showSnack(context, 'Unexpected error: $e');
+      setState(() => _error = 'Unexpected error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -304,93 +422,196 @@ class _SignInScreenState extends State<_SignInScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7FA),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  blurRadius: 24,
-                  color: Colors.black.withOpacity(0.06),
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
+    // ── Email confirmation waiting screen ─────────────────────────────────
+    if (_awaitingConfirmation) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Fitness Macros',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                const Icon(
+                  Icons.mark_email_read_rounded,
+                  size: 72,
+                  color: AppColors.primary,
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.mail_outline),
-                  ),
+                const SizedBox(height: 24),
+                Text(
+                  'Check your inbox',
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: _pass,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _busy ? null : _signIn,
-                        child: _busy
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Sign in'),
-                      ),
-                    ),
-                  ],
+                Text(
+                  'We sent a confirmation link to:\n${_email.text.trim()}',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: Colors.black54),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: _busy ? null : _signUp,
-                        child: const Text('Create account'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
                 Text(
-                  'Vos données (logs/poids/foods/goals) seront liées à votre compte.',
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  'Open the link on this device, then come back and sign in.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: Colors.black45),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton(
+                  onPressed: () =>
+                      setState(() => _awaitingConfirmation = false),
+                  child: const Text('Back to Sign In'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Logo / Brand
+                const SizedBox(height: 12),
+                Icon(
+                  Icons.fitness_center_rounded,
+                  size: 52,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Fitness Macros',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Track your nutrition, reach your goals.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.black54,
                   ),
                   textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 36),
+
+                // ── Email
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Password
+                StatefulBuilder(
+                  builder: (_, setS) => TextField(
+                    controller: _pass,
+                    obscureText: !_showPass,
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _signIn(),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        tooltip: _showPass ? 'Hide password' : 'Show password',
+                        icon: Icon(
+                          _showPass
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 20,
+                        ),
+                        onPressed: () => setState(() => _showPass = !_showPass),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Error
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger.withValues(alpha: .1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.danger,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: AppColors.danger,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 20),
+
+                // ── Sign in
+                ElevatedButton(
+                  onPressed: _busy ? null : _signIn,
+                  child: _busy
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Sign In'),
+                ),
+                const SizedBox(height: 10),
+
+                // ── Create account
+                OutlinedButton(
+                  onPressed: _busy ? null : _signUp,
+                  child: const Text('Create Account'),
+                ),
+                const SizedBox(height: 16),
+
+                Text(
+                  'Your data is linked to your account and synced securely.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.black38,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           ),

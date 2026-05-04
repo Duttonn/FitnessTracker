@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:flutter_fitness_app/theme.dart';
 
 class BarcodeScanScreen extends StatefulWidget {
   const BarcodeScanScreen({super.key});
 
-  // Preserve existing helper used elsewhere.
   static Future<String?> pick(BuildContext context) => Navigator.push<String>(
     context,
     MaterialPageRoute(builder: (_) => const BarcodeScanScreen()),
@@ -17,10 +17,10 @@ class BarcodeScanScreen extends StatefulWidget {
 
 class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
   late final MobileScannerController _controller;
-  bool _hasPermission = !kIsWeb; // On web we request explicitly.
+  bool _hasPermission = !kIsWeb;
   bool _isStarting = false;
   String? _permissionError;
-  String? _lastCode; // recent detected code
+  bool _done = false; // prevent double-pop
 
   @override
   void initState() {
@@ -28,7 +28,6 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     _controller = MobileScannerController(
       detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
-      // On mobile auto-starts via plugin; on web we'll manual start().
       autoStart: !kIsWeb,
     );
   }
@@ -46,11 +45,11 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
       _isStarting = true;
     });
     try {
-      await _controller.start(); // must be user gesture
+      await _controller.start();
       setState(() => _hasPermission = true);
     } catch (e) {
       setState(() {
-        _permissionError = 'Camera permission was denied or not available.';
+        _permissionError = 'Camera permission denied or unavailable.';
         _hasPermission = false;
       });
     } finally {
@@ -58,48 +57,20 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
     }
   }
 
-  void _useThisCode() {
-    if (_lastCode == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No code detected yet')));
-      return;
-    }
-    Navigator.of(context).pop(_lastCode);
+  void _onDetect(BarcodeCapture capture) {
+    if (_done) return;
+    final raw = capture.barcodes.firstOrNull?.rawValue;
+    if (raw == null || raw.isEmpty) return;
+    _done = true;
+    Navigator.of(context).pop(raw);
   }
 
   @override
   Widget build(BuildContext context) {
-    final overlay = Container(
-      alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.all(12),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                _lastCode == null
-                    ? 'Point camera at a barcode'
-                    : 'Code: ${_lastCode}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: _useThisCode,
-              child: const Text('Use this code'),
-            ),
-          ],
-        ),
-      ),
-    );
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Scan a Barcode'),
+        title: const Text('Scan Barcode'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),
@@ -115,34 +86,33 @@ class _BarcodeScanScreenState extends State<BarcodeScanScreen> {
           else
             MobileScanner(
               controller: _controller,
-              onDetect: (capture) {
-                final codes = capture.barcodes;
-                if (codes.isEmpty) return;
-                final raw = codes.first.rawValue;
-                if (raw == null || raw.isEmpty) return;
-                setState(() => _lastCode = raw);
-              },
+              onDetect: _onDetect,
             ),
 
-          // Optional scan frame
+          // Scan frame
           IgnorePointer(
             child: Align(
               alignment: Alignment.center,
-              child: Container(
-                width: 280,
-                height: 180,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.9),
-                    width: 2,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 280,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.primary, width: 2.5),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Point at a barcode — detects automatically',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
               ),
             ),
           ),
-
-          if (_hasPermission) overlay,
         ],
       ),
     );
@@ -174,15 +144,11 @@ class _WebPermissionGate extends StatelessWidget {
             const SizedBox(height: 16),
             const Text(
               'Enable Camera',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             const Text(
-              'To scan a barcode, allow camera access. You can change this later in your browser settings.',
+              'Allow camera access to scan barcodes. You can change this in browser settings.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70),
             ),
@@ -197,7 +163,7 @@ class _WebPermissionGate extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Tip: On iPhone/iPad, this requires Safari over HTTPS.',
+              'Tip: On iPhone/iPad, requires Safari over HTTPS.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white54, fontSize: 12),
             ),

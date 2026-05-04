@@ -46,3 +46,7 @@ app.*.map.json
 
 # Local Netlify folder
 .netlify
+
+# Local env / secrets
+.env.local
+.env

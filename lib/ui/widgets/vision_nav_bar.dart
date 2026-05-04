@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_fitness_app/theme.dart';
 
-/// Vision-style bottom indicator bar.
-/// - Stateless/controlled via [currentIndex].
-/// - Parent updates page & index; we only render.
+/// Vision-style bottom navigation bar.
+/// Stateless / controlled via [currentIndex].
 class VisionNavBar extends StatelessWidget {
   const VisionNavBar({
     super.key,
@@ -14,57 +14,58 @@ class VisionNavBar extends StatelessWidget {
   final ValueChanged<int> onItemSelected;
 
   static const _items = <_VisionItem>[
-    _VisionItem(icon: Icons.grid_view, label: 'Home'),
+    _VisionItem(icon: Icons.grid_view_rounded, label: 'Home'),
     _VisionItem(icon: Icons.list_rounded, label: 'Logs'),
-    _VisionItem(icon: Icons.bar_chart, label: 'Progress'),
-    _VisionItem(icon: Icons.restaurant, label: 'Foods'),
-    _VisionItem(icon: Icons.settings, label: 'Settings'),
+    _VisionItem(icon: Icons.show_chart_rounded, label: 'Progress'),
+    _VisionItem(icon: Icons.restaurant_rounded, label: 'Foods'),
+    _VisionItem(icon: Icons.settings_rounded, label: 'Settings'),
   ];
 
-  // Public height for layout helpers
-  static const double kHeight =
-      64; // includes visual pill (container is 44 inside)
+  // Public height constant for layout helpers
+  static const double kHeight = 68.0;
 
   @override
   Widget build(BuildContext context) {
     final pad = MediaQuery.viewPaddingOf(context).bottom;
-    return IgnorePointer(
-      ignoring: false,
-      child: Container(
-        margin: EdgeInsets.fromLTRB(20, 0, 20, (pad > 0 ? pad - 6 : 6)),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white30.withValues(alpha: .7),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .06),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: EdgeInsets.fromLTRB(16, 0, 16, pad > 0 ? pad - 4 : 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color:
+            isDark
+                ? AppColors.cardDark.withValues(alpha: .96)
+                : Colors.white.withValues(alpha: .96),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: .06) : Colors.black.withValues(alpha: .06),
         ),
-        child: SizedBox(
-          height: 44,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Removed background highlight pill per request; only icon color indicates selection
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(_items.length, (i) {
-                  final selected = i == currentIndex;
-                  final item = _items[i];
-                  return _NavIcon(
-                    icon: item.icon,
-                    label: item.label,
-                    selected: selected,
-                    onTap: () => onItemSelected(i),
-                  );
-                }),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? .3 : .08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
+        ],
+      ),
+      child: SizedBox(
+        height: 48,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: List.generate(_items.length, (i) {
+            final selected = i == currentIndex;
+            final item = _items[i];
+            return _NavIcon(
+              icon: item.icon,
+              label: item.label,
+              selected: selected,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onItemSelected(i);
+              },
+            );
+          }),
         ),
       ),
     );
@@ -88,36 +89,64 @@ class _NavIcon extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = AppColors.primary;
-    final color = selected ? primary : Colors.black.withValues(alpha: .45);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 170),
-        scale: selected ? 1.0 : 0.86,
-        curve: Curves.easeOut,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: color,
+    final unselectedColor =
+        isDark ? Colors.white.withValues(alpha: .45) : Colors.black.withValues(alpha: .38);
+    final color = selected ? primary : unselectedColor;
+
+    return Semantics(
+      label: label,
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 56,
+          height: 48,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                padding: selected
+                    ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4)
+                    : EdgeInsets.zero,
+                decoration: selected
+                    ? BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(20),
+                      )
+                    : null,
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 200),
+                  scale: selected ? 1.0 : 0.88,
+                  curve: Curves.easeOut,
+                  child: Icon(icon, size: 22, color: color),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  color: color,
+                  letterSpacing: selected ? 0.2 : 0,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// Backwards compat constant for older helpers
+// Backwards-compat constant
 const double kVisionNavBarHeight = VisionNavBar.kHeight;

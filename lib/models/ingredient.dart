@@ -1,6 +1,29 @@
 import 'package:flutter/foundation.dart';
 
 @immutable
+class Portion {
+  final String label;
+  final double grams;
+
+  const Portion({required this.label, required this.grams});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Portion && other.label == label && other.grams == grams;
+
+  @override
+  int get hashCode => Object.hash(label, grams);
+
+  Map<String, dynamic> toJson() => {'label': label, 'grams': grams};
+
+  factory Portion.fromJson(Map<String, dynamic> m) => Portion(
+    label: (m['label'] as String?) ?? '',
+    grams: (m['grams'] as num?)?.toDouble() ?? 0,
+  );
+}
+
+@immutable
 class Ingredient {
   final String id;
   final String name;
@@ -17,6 +40,7 @@ class Ingredient {
   final String source; // 'manual' | 'openfoodfacts'
   final DateTime? lastFetchedAt;
   final DateTime? updatedAt; // last local modification (for sync)
+  final List<Portion> portions; // optional custom serving units
   const Ingredient({
     this.id = '',
     required this.name,
@@ -32,6 +56,7 @@ class Ingredient {
     this.source = 'manual',
     this.lastFetchedAt,
     this.updatedAt,
+    this.portions = const [],
   });
   Ingredient copyWith({
     String? id,
@@ -48,6 +73,7 @@ class Ingredient {
     String? source,
     DateTime? lastFetchedAt,
     DateTime? updatedAt,
+    List<Portion>? portions,
   }) => Ingredient(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -63,6 +89,7 @@ class Ingredient {
     source: source ?? this.source,
     lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    portions: portions ?? this.portions,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -79,6 +106,7 @@ class Ingredient {
     'source': source,
     'lastFetchedAt': lastFetchedAt?.toIso8601String(),
     'updatedAt': updatedAt?.toIso8601String(),
+    'portions': portions.map((p) => p.toJson()).toList(),
   };
   factory Ingredient.fromJson(Map<String, dynamic> m) => Ingredient(
     id: m['id'] ?? '',
@@ -99,6 +127,10 @@ class Ingredient {
     updatedAt: m['updatedAt'] != null
         ? DateTime.tryParse(m['updatedAt'])
         : null,
+    portions: (m['portions'] as List?)
+            ?.map((e) => Portion.fromJson(Map<String, dynamic>.from(e)))
+            .toList() ??
+        const [],
   );
   // Convenience macro scaling
   Macros forGrams(double grams) {

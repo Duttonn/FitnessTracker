@@ -7,9 +7,25 @@ import 'package:flutter_fitness_app/theme.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
 import 'package:flutter_fitness_app/ui/widgets/entry_tile.dart';
 import 'package:flutter_fitness_app/data/old_export_parser.dart';
+import 'package:flutter_fitness_app/ui/screens/quick_add_sheet.dart';
 
 class LogsScreen extends StatelessWidget {
   const LogsScreen({super.key});
+
+  // Returns a user-friendly relative label for a dayKey (yyyy-MM-dd)
+  static String _dayLabel(String dayKey) {
+    final date = DateTime.parse(dayKey);
+    final today = AppState.dayKeyFrom(DateTime.now());
+    final yesterday = AppState.dayKeyFrom(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    if (dayKey == today) return 'Today';
+    if (dayKey == yesterday) return 'Yesterday';
+    // Within the last 7 days → weekday name
+    final diff = DateTime.now().difference(date).inDays;
+    if (diff < 7) return DateFormat('EEEE').format(date);
+    return DateFormat('MMM d, yyyy').format(date);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,14 +33,13 @@ class LogsScreen extends StatelessWidget {
     final dayKeys = state.entriesByDay.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
-    // height of your floating nav pill + a little breathing room
-    final navPillHeight = 64.0; // keep in sync with VisionNavBar
+    final navPillHeight = 64.0;
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     final listBottomPadding = navPillHeight + bottomInset + 24;
 
     return SafeArea(
       top: true,
-      bottom: false, // let content extend behind the floating pill
+      bottom: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -35,20 +50,26 @@ class LogsScreen extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Logs',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Import',
-                  onPressed: () => _import(context),
-                  icon: const Icon(Icons.download),
+                Semantics(
+                  label: 'Import data',
+                  child: IconButton(
+                    tooltip: 'Import',
+                    onPressed: () => _import(context),
+                    icon: const Icon(Icons.download_rounded),
+                  ),
                 ),
-                IconButton(
-                  tooltip: 'Export',
-                  onPressed: () => _export(context),
-                  icon: const Icon(Icons.upload),
+                Semantics(
+                  label: 'Export data',
+                  child: IconButton(
+                    tooltip: 'Export',
+                    onPressed: () => _export(context),
+                    icon: const Icon(Icons.upload_rounded),
+                  ),
                 ),
               ],
             ),
@@ -56,15 +77,49 @@ class LogsScreen extends StatelessWidget {
             Expanded(
               child: dayKeys.isEmpty
                   ? Center(
-                      child: Text(
-                        'No entries yet',
-                        style: Theme.of(context).textTheme.bodyMedium,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.list_alt_rounded,
+                            size: 56,
+                            color: Theme.of(context).brightness ==
+                                    Brightness.dark
+                                ? Colors.white24
+                                : Colors.black26,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No logs yet',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white54
+                                  : Colors.black45,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Add food on the Home tab to start tracking',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white38
+                                  : Colors.black38,
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   : ListView.builder(
                       padding: EdgeInsets.only(bottom: listBottomPadding),
                       itemCount: dayKeys.length,
-                      itemBuilder: (c, i) => _DayBlock(dayKey: dayKeys[i]),
+                      itemBuilder: (c, i) => _DayBlock(
+                        dayKey: dayKeys[i],
+                        label: _dayLabel(dayKeys[i]),
+                      ),
                     ),
             ),
           ],
@@ -180,29 +235,25 @@ class LogsScreen extends StatelessWidget {
 
 class _DayBlock extends StatelessWidget {
   final String dayKey;
-  const _DayBlock({required this.dayKey});
+  final String label;
+  const _DayBlock({required this.dayKey, required this.label});
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final entries = state.entriesForDay(dayKey)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final totals = state.totalsForDay(dayKey);
-    final date = DateTime.parse(dayKey);
-    final dateStr = DateFormat('MMM d, yyyy').format(date);
     double protein = totals['protein'] as double;
     double carbs = totals['carbs'] as double;
     double fat = totals['fat'] as double;
     int kcal = totals['kcal'] as int;
     double fiber = totals['fiber'] as double;
-    double sumMacros = protein + carbs + fat;
-    double proteinPct = sumMacros == 0 ? 0 : protein / sumMacros * 100;
-    double carbsPct = sumMacros == 0 ? 0 : carbs / sumMacros * 100;
-    double fatPct = sumMacros == 0 ? 0 : fat / sumMacros * 100;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: appCardDecoration(),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: appCardDecoration(isDark: isDark),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -210,7 +261,7 @@ class _DayBlock extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  dateStr,
+                  label,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -218,49 +269,63 @@ class _DayBlock extends StatelessWidget {
               ),
               Text(
                 '$kcal kcal',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w700, color: AppColors.primary),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          // Macro chips row
           Wrap(
-            spacing: 16,
-            runSpacing: 8,
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              Text(
-                '${protein.toStringAsFixed(0)}g Protein',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Text(
-                '${carbs.toStringAsFixed(0)}g Carbs',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Text(
-                '${fat.toStringAsFixed(0)}g Fat',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Text(
-                '${fiber.toStringAsFixed(0)}g Fiber',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              Text(
-                'P${proteinPct.toStringAsFixed(0)}/F${fatPct.toStringAsFixed(0)}/C${carbsPct.toStringAsFixed(0)}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: Colors.black54),
-              ),
+              _MiniChip('P ${protein.toStringAsFixed(0)}g', AppColors.protein),
+              _MiniChip('C ${carbs.toStringAsFixed(0)}g', AppColors.carbs),
+              _MiniChip('F ${fat.toStringAsFixed(0)}g', AppColors.fat),
+              _MiniChip('Fi ${fiber.toStringAsFixed(0)}g', AppColors.fiber),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 6),
           for (final e in entries)
-            EntryTile(
-              entry: e,
-              onEdit: () => _editEntry(context, e),
-              onDelete: () =>
-                  context.read<AppState>().deleteEntry(e.id, e.dayKey),
-              onDuplicate: () => context.read<AppState>().duplicateEntry(e),
+            Dismissible(
+              key: ValueKey(e.id),
+              direction: DismissDirection.endToStart,
+              onDismissed: (_) {
+                HapticFeedback.mediumImpact();
+                final app = context.read<AppState>();
+                app.deleteEntry(e.id, e.dayKey);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Deleted "${e.title ?? 'Entry'}"'),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () => app.addEntry(e),
+                    ),
+                  ),
+                );
+              },
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.delete_outline_rounded,
+                    color: AppColors.danger),
+              ),
+              child: EntryTile(
+                entry: e,
+                onEdit: () => _editEntrySheet(context, e),
+                onDelete: () {
+                  context.read<AppState>().deleteEntry(e.id, e.dayKey);
+                },
+                onDuplicate: () =>
+                    context.read<AppState>().duplicateEntry(e),
+              ),
             ),
         ],
       ),
@@ -268,157 +333,34 @@ class _DayBlock extends StatelessWidget {
   }
 }
 
-void _editEntry(BuildContext context, MacroEntry entry) {
-  final state = context.read<AppState>();
-  final proteinCtrl = TextEditingController(
-    text: entry.protein.toStringAsFixed(0),
-  );
-  final carbsCtrl = TextEditingController(text: entry.carbs.toStringAsFixed(0));
-  final fatCtrl = TextEditingController(text: entry.fat.toStringAsFixed(0));
-  final fiberCtrl = TextEditingController(text: entry.fiber.toStringAsFixed(0));
-  final titleCtrl = TextEditingController(text: entry.title ?? '');
-  Meal selectedMeal = entry.meal;
-  DateTime createdAt = entry.createdAt;
-  int computedKcal() {
-    final p = double.tryParse(proteinCtrl.text) ?? 0;
-    final c = double.tryParse(carbsCtrl.text) ?? 0;
-    final f = double.tryParse(fatCtrl.text) ?? 0;
-    return (p * 4 + c * 4 + f * 9).round();
-  }
-
-  showDialog(
-    context: context,
-    builder: (c) => StatefulBuilder(
-      builder: (c, setSt) {
-        void hook() => setSt(() {});
-        proteinCtrl.addListener(hook);
-        carbsCtrl.addListener(hook);
-        fatCtrl.addListener(hook);
-        return AlertDialog(
-          title: const Text('Edit Entry'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: proteinCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Protein g',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: carbsCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Carbs g'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: fatCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Fat g'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: fiberCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Fiber g'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Calories (auto): ${computedKcal()} kcal',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButton<Meal>(
-                  value: selectedMeal,
-                  onChanged: (m) =>
-                      setSt(() => selectedMeal = m ?? selectedMeal),
-                  items: Meal.values
-                      .map(
-                        (m) => DropdownMenuItem(value: m, child: Text(m.name)),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () async {
-                    final picked = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.fromDateTime(createdAt),
-                    );
-                    if (picked != null) {
-                      setSt(
-                        () => createdAt = DateTime(
-                          createdAt.year,
-                          createdAt.month,
-                          createdAt.day,
-                          picked.hour,
-                          picked.minute,
-                        ),
-                      );
-                    }
-                  },
-                  child: Text(
-                    'Time: ${DateFormat('h:mm a').format(createdAt)}',
-                  ),
-                ),
-              ],
-            ),
+class _MiniChip extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _MiniChip(this.text, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                double parseD(TextEditingController ctrl) =>
-                    double.tryParse(ctrl.text) ?? 0;
-                final updated = entry.copyWith(
-                  title: titleCtrl.text.trim().isEmpty
-                      ? null
-                      : titleCtrl.text.trim(),
-                  protein: parseD(proteinCtrl),
-                  carbs: parseD(carbsCtrl),
-                  fat: parseD(fatCtrl),
-                  fiber: parseD(fiberCtrl),
-                  kcal: computedKcal(),
-                  meal: selectedMeal,
-                  createdAt: createdAt,
-                );
-                state.updateEntry(updated);
-                Navigator.pop(c);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    ),
+        ),
+      );
+}
+
+void _editEntrySheet(BuildContext context, MacroEntry entry) {
+  final appState = context.read<AppState>();
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (c) => QuickAddSheet.edit(entry: entry, appState: appState),
   );
 }

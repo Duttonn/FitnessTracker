@@ -335,6 +335,11 @@ class _GoalsPanelState extends State<GoalsPanel> {
                                   fat: fat,
                                   fiber: fiber,
                                   kcal: kcalFinal,
+                                  // Preserve existing water goal
+                                  waterGoalMl: context
+                                      .read<AppState>()
+                                      .goals
+                                      .waterGoalMl,
                                 ));
                             Navigator.pop(c);
                           },
@@ -537,124 +542,4 @@ class _Card extends StatelessWidget {
   );
 }
 
-class GoalsEditorCard extends StatefulWidget {
-  const GoalsEditorCard({super.key});
-  @override
-  State<GoalsEditorCard> createState() => _GoalsEditorCardState();
-}
-
-class _GoalsEditorCardState extends State<GoalsEditorCard> {
-  double protein = 0, carbs = 0, fat = 0, fiber = 0;
-  @override
-  void initState() {
-    super.initState();
-    final g = context.read<AppState>().goals;
-    protein = g.protein;
-    carbs = g.carbs;
-    fat = g.fat;
-    fiber = g.fiber;
-  }
-
-  int get kcal => (protein * 4 + carbs * 4 + fat * 9).round();
-
-  Widget _slider({
-    required String label,
-    required double value,
-    required double max,
-    required ValueChanged<double> onChanged,
-    String suffix = 'g',
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(label)),
-            Text('${value.round()}$suffix'),
-          ],
-        ),
-        Slider(
-          value: value.clamp(0, max),
-          max: max,
-          divisions: max.toInt(),
-          label: value.round().toString(),
-          onChanged: (v) => setState(() => onChanged(v)),
-        ),
-        const SizedBox(height: 4),
-      ],
-    );
-  }
-
-  void _save() {
-    final app = context.read<AppState>();
-    app.setGoals(Goals(
-      protein: protein,
-      carbs: carbs,
-      fat: fat,
-      fiber: fiber,
-      kcal: kcal,
-    ));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Goals saved')),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Daily Goals',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            _slider(
-              label: 'Protein',
-              value: protein,
-              max: 300,
-              onChanged: (v) => protein = v,
-            ),
-            _slider(
-              label: 'Carbs',
-              value: carbs,
-              max: 600,
-              onChanged: (v) => carbs = v,
-            ),
-            _slider(
-              label: 'Fat',
-              value: fat,
-              max: 250,
-              onChanged: (v) => fat = v,
-            ),
-            _slider(
-              label: 'Fiber',
-              value: fiber,
-              max: 120,
-              onChanged: (v) => fiber = v,
-            ),
-            const SizedBox(height: 4),
-            Text('Calories (derived): $kcal'),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _save,
-                child: const Text('Save Goals'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// GoalsEditorCard removed — was dead code (never referenced anywhere).

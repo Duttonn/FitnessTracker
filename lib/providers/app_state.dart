@@ -1,12 +1,82 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../data/local_store_interface.dart';
 import 'package:flutter_fitness_app/models/ingredient.dart';
 import 'package:flutter_fitness_app/models/meal_def.dart';
+import 'package:flutter_fitness_app/models/seed_ingredients.dart';
+import 'package:flutter_fitness_app/workout/models.dart' show SetLog, Exercise;
+import 'package:flutter_fitness_app/workout/exercise_library.dart' show kBuiltInExercises;
 import 'package:openfoodfacts/openfoodfacts.dart' as off;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 enum FoodsTab { ingredients, meals } // added
+
+enum DayType { rest, training, intense }
+
+extension DayTypeX on DayType {
+  String get label => switch (this) {
+    DayType.rest => 'Rest Day',
+    DayType.training => 'Training',
+    DayType.intense => 'Intense',
+  };
+  String get emoji => switch (this) {
+    DayType.rest => '😴',
+    DayType.training => '💪',
+    DayType.intense => '🔥',
+  };
+}
+
+class MacroProfile {
+  final DayType dayType;
+  double protein;
+  double carbs;
+  double fat;
+  double fiber;
+  int kcal;
+
+  MacroProfile({
+    required this.dayType,
+    required this.protein,
+    required this.carbs,
+    required this.fat,
+    required this.fiber,
+    required this.kcal,
+  });
+
+  Goals toGoals({WeightGoal? weightGoal, int waterGoalMl = 2000}) => Goals(
+    protein: protein,
+    carbs: carbs,
+    fat: fat,
+    fiber: fiber,
+    kcal: kcal,
+    waterGoalMl: waterGoalMl,
+    weightGoal: weightGoal,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'dayType': dayType.name,
+    'protein': protein,
+    'carbs': carbs,
+    'fat': fat,
+    'fiber': fiber,
+    'kcal': kcal,
+  };
+
+  factory MacroProfile.fromJson(Map<String, dynamic> m) => MacroProfile(
+    dayType: DayType.values.firstWhere(
+      (e) => e.name == m['dayType'],
+      orElse: () => DayType.rest,
+    ),
+    protein: (m['protein'] ?? 150).toDouble(),
+    carbs: (m['carbs'] ?? 150).toDouble(),
+    fat: (m['fat'] ?? 55).toDouble(),
+    fiber: (m['fiber'] ?? 25).toDouble(),
+    kcal: (m['kcal'] ?? 1695).toInt(),
+  );
+}
 
 class Goals {
   double protein;
@@ -14,6 +84,8 @@ class Goals {
   double fat;
   double fiber;
   int kcal;
+  int waterGoalMl;   // daily water goal in ml
+  WeightGoal? weightGoal; // optional weight target
   DateTime? updatedAt; // sync metadata
   Goals({
     this.protein = 120,
@@ -21,6 +93,8 @@ class Goals {
     this.fat = 65,
     this.fiber = 30,
     this.kcal = 2100,
+    this.waterGoalMl = 2000,
+    this.weightGoal,
     this.updatedAt,
   });
   Map<String, dynamic> toJson() => {
@@ -29,6 +103,8 @@ class Goals {
     'fat': fat,
     'fiber': fiber,
     'kcal': kcal,
+    'waterGoalMl': waterGoalMl,
+    'weightGoal': weightGoal?.toJson(),
     'updatedAt': updatedAt?.toIso8601String(),
   };
   factory Goals.fromJson(Map m) => Goals(
@@ -37,6 +113,10 @@ class Goals {
     fat: (m['fat'] ?? 65).toDouble(),
     fiber: (m['fiber'] ?? 30).toDouble(),
     kcal: (m['kcal'] ?? 2100).toInt(),
+    waterGoalMl: (m['waterGoalMl'] ?? 2000).toInt(),
+    weightGoal: m['weightGoal'] != null
+        ? WeightGoal.fromJson(m['weightGoal'] as Map<String, dynamic>)
+        : null,
     updatedAt: m['updatedAt'] != null
         ? DateTime.tryParse(m['updatedAt'])
         : null,
@@ -181,16 +261,51 @@ class Food {
 }
 
 class WeightEntry {
+  final String id;
   DateTime loggedAt;
   double kg;
-  WeightEntry({required this.loggedAt, required this.kg});
+  WeightEntry({String? id, required this.loggedAt, required this.kg})
+      : id = id ?? const Uuid().v4();
   Map<String, dynamic> toJson() => {
+    'id': id,
     'loggedAt': loggedAt.toIso8601String(),
     'kg': kg,
   };
   factory WeightEntry.fromJson(Map<String, dynamic> m) => WeightEntry(
+    id: m['id'] as String?,
     loggedAt: DateTime.parse(m['loggedAt']),
     kg: (m['kg'] ?? 0).toDouble(),
+  );
+  WeightEntry copyWith({DateTime? loggedAt, double? kg}) => WeightEntry(
+    id: id,
+    loggedAt: loggedAt ?? this.loggedAt,
+    kg: kg ?? this.kg,
+  );
+}
+
+/// A weight target to reach by a given date.
+class WeightGoal {
+  final double targetKg;
+  final DateTime? targetDate;
+  final double? startKg;    // weight at start of goal period
+  final DateTime? startDate; // when the goal period begins
+  const WeightGoal({
+    required this.targetKg,
+    this.targetDate,
+    this.startKg,
+    this.startDate,
+  });
+  Map<String, dynamic> toJson() => {
+    'targetKg': targetKg,
+    'targetDate': targetDate?.toIso8601String(),
+    'startKg': startKg,
+    'startDate': startDate?.toIso8601String(),
+  };
+  factory WeightGoal.fromJson(Map<String, dynamic> m) => WeightGoal(
+    targetKg: (m['targetKg'] as num).toDouble(),
+    targetDate: m['targetDate'] != null ? DateTime.parse(m['targetDate'] as String) : null,
+    startKg: m['startKg'] != null ? (m['startKg'] as num).toDouble() : null,
+    startDate: m['startDate'] != null ? DateTime.parse(m['startDate'] as String) : null,
   );
 }
 
@@ -217,6 +332,114 @@ class AppState extends ChangeNotifier {
   LocalStore _store = createLocalStore();
   // Expose whether cloud sync active (auth present)
   bool get isCloudSyncing => Supabase.instance.client.auth.currentUser != null;
+  // Water tracking — keyed by dayKey (same format as entriesByDay)
+  final Map<String, int> waterByDay = {}; // dayKey -> ml consumed
+
+  // ── Load state ────────────────────────────────────────────────────────────
+  bool isLoaded = false;
+
+  // ── Workout mode ──────────────────────────────────────────────────────────
+  bool _workoutMode = false;
+  bool get isWorkoutMode => _workoutMode;
+
+  void enterWorkoutMode() {
+    _workoutMode = true;
+    notifyListeners();
+  }
+
+  void exitWorkoutMode() {
+    _workoutMode = false;
+    notifyListeners();
+  }
+
+  // ── Day type & daily check-in ─────────────────────────────────────────────
+  DayType? todayDayType;
+  String? _lastCheckInKey;
+
+  bool get needsCheckIn => _lastCheckInKey != dayKeyFrom(DateTime.now());
+
+  Map<DayType, MacroProfile> macroProfiles = {
+    DayType.rest: MacroProfile(dayType: DayType.rest, protein: 150, carbs: 150, fat: 55, fiber: 25, kcal: 1695),
+    DayType.training: MacroProfile(dayType: DayType.training, protein: 180, carbs: 250, fat: 65, fiber: 30, kcal: 2305),
+    DayType.intense: MacroProfile(dayType: DayType.intense, protein: 200, carbs: 350, fat: 80, fiber: 30, kcal: 2920),
+  };
+
+  void setDayType(DayType type) {
+    todayDayType = type;
+    _lastCheckInKey = dayKeyFrom(DateTime.now());
+    final profile = macroProfiles[type]!;
+    setGoals(profile.toGoals(
+      weightGoal: goals.weightGoal,
+      waterGoalMl: goals.waterGoalMl,
+    ));
+  }
+
+  void updateMacroProfile(DayType type, MacroProfile profile) {
+    macroProfiles[type] = profile;
+    if (todayDayType == type) {
+      setGoals(profile.toGoals(
+        weightGoal: goals.weightGoal,
+        waterGoalMl: goals.waterGoalMl,
+      ));
+    }
+    _save();
+    notifyListeners();
+  }
+
+  // ── Custom exercises (user-created) ──────────────────────────────────────
+  final List<Exercise> customExercises = [];
+
+  /// All exercises: built-ins first, then user-created ones.
+  List<Exercise> get allExercises => [...kBuiltInExercises, ...customExercises];
+
+  /// Lookup map for all exercises by id.
+  Map<String, Exercise> get exerciseLibraryMap =>
+      {for (final e in allExercises) e.id: e};
+
+  void addCustomExercise(Exercise ex) {
+    customExercises.removeWhere((e) => e.id == ex.id); // avoid duplicates
+    customExercises.add(ex);
+    _save();
+    notifyListeners();
+  }
+
+  void removeCustomExercise(String id) {
+    customExercises.removeWhere((e) => e.id == id);
+    _save();
+    notifyListeners();
+  }
+
+  // ── Workout set logs ──────────────────────────────────────────────────────
+  final Map<String, List<SetLog>> allSetLogs = {}; // exerciseId -> all-time logs
+
+  List<SetLog> logsForExercise(String exerciseId) =>
+      allSetLogs[exerciseId] ?? [];
+
+  SetLog? lastSetFor(String exerciseId) =>
+      (allSetLogs[exerciseId] ?? []).lastOrNull;
+
+  List<SetLog> todaySetLogs() {
+    final today = dayKeyFrom(DateTime.now());
+    final result = allSetLogs.values
+        .expand((logs) => logs)
+        .where((log) => dayKeyFrom(log.at) == today)
+        .toList();
+    result.sort((a, b) => b.at.compareTo(a.at));
+    return result;
+  }
+
+  void logSet(SetLog log) {
+    (allSetLogs[log.exerciseId] ??= []).add(log);
+    _save();
+    notifyListeners();
+  }
+
+  void deleteSetLog(SetLog log) {
+    allSetLogs[log.exerciseId]?.remove(log);
+    _save();
+    notifyListeners();
+  }
+
   AppState() {
     _initStore();
   }
@@ -367,8 +590,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addWeight(double kg, {DateTime? at}) {
-    weights.add(WeightEntry(loggedAt: at ?? DateTime.now(), kg: kg));
+  void addWeight(double kg, {DateTime? at, String? id}) {
+    weights.add(
+        WeightEntry(id: id, loggedAt: at ?? DateTime.now(), kg: kg));
+    weights.sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
+    _save();
+    notifyListeners();
+  }
+
+  void deleteWeight(String id) {
+    weights.removeWhere((e) => e.id == id);
+    _save();
+    notifyListeners();
+  }
+
+  void updateWeight(String id, {required double kg, required DateTime at}) {
+    final idx = weights.indexWhere((e) => e.id == id);
+    if (idx == -1) return;
+    weights[idx] = weights[idx].copyWith(kg: kg, loggedAt: at);
+    weights.sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
+    _save();
+    notifyListeners();
+  }
+
+  void setWeightGoal(WeightGoal? goal) {
+    goals.weightGoal = goal;
     _save();
     notifyListeners();
   }
@@ -388,8 +634,17 @@ class AppState extends ChangeNotifier {
     if (m.isNotEmpty) {
       _fromJson(m);
     }
+    _seedDefaultIngredientsIfEmpty();
     _lastDayKey = dayKeyFrom(DateTime.now());
+    isLoaded = true;
     notifyListeners();
+  }
+
+  void _seedDefaultIngredientsIfEmpty() {
+    if (ingredients.isNotEmpty) return;
+    for (final ing in kSeedIngredients) {
+      ingredients[ing.id] = ing;
+    }
   }
 
   Future<void> _save() async => _store.saveJson(toJson());
@@ -407,6 +662,15 @@ class AppState extends ChangeNotifier {
     'activeGoalPresetId': activeGoalPresetId,
     'barcodeCache': barcodeCache,
     'activeWeekdays': activeWeekdays,
+    'waterByDay': waterByDay,
+    // Workout
+    'macroProfiles': macroProfiles.map((k, v) => MapEntry(k.name, v.toJson())),
+    'lastCheckInKey': _lastCheckInKey,
+    'todayDayType': todayDayType?.name,
+    'allSetLogs': allSetLogs.map(
+      (k, v) => MapEntry(k, v.map((s) => s.toJson()).toList()),
+    ),
+    'customExercises': customExercises.map((e) => e.toJson()).toList(),
   };
   void _fromJson(Map m) {
     goals = Goals.fromJson(m['goals'] ?? {});
@@ -476,9 +740,59 @@ class AppState extends ChangeNotifier {
     if (aw is List) {
       activeWeekdays = aw.whereType<int>().toList();
     }
+    // Water
+    waterByDay.clear();
+    final wb = m['waterByDay'];
+    if (wb is Map) {
+      wb.forEach((k, v) {
+        if (k is String && v is int) waterByDay[k] = v;
+      });
+    }
+    // Macro profiles
+    final mp = m['macroProfiles'];
+    if (mp is Map) {
+      mp.forEach((k, v) {
+        try {
+          final profile = MacroProfile.fromJson(Map<String, dynamic>.from(v as Map));
+          macroProfiles[profile.dayType] = profile;
+        } catch (_) {}
+      });
+    }
+    _lastCheckInKey = m['lastCheckInKey'] as String?;
+    final dts = m['todayDayType'] as String?;
+    if (dts != null) {
+      todayDayType = DayType.values.firstWhere(
+        (e) => e.name == dts,
+        orElse: () => DayType.training,
+      );
+    } else {
+      todayDayType = null;
+    }
+    // Set logs
+    allSetLogs.clear();
+    final sl = m['allSetLogs'];
+    if (sl is Map) {
+      sl.forEach((k, v) {
+        if (k is String && v is List) {
+          allSetLogs[k] = v
+              .map((s) => SetLog.fromJson(Map<String, dynamic>.from(s as Map)))
+              .toList();
+        }
+      });
+    }
+    // Custom exercises
+    customExercises.clear();
+    final ce = m['customExercises'];
+    if (ce is List) {
+      for (final e in ce) {
+        try {
+          customExercises.add(Exercise.fromJson(Map<String, dynamic>.from(e as Map)));
+        } catch (_) {}
+      }
+    }
   }
 
-  static String _uuid() => DateTime.now().microsecondsSinceEpoch.toString();
+  static String _uuid() => const Uuid().v4();
   static String newId() => _uuid(); // convenience for UI
 
   void startRolloverTimer() {
@@ -527,6 +841,14 @@ class AppState extends ChangeNotifier {
 
   void removeIngredient(String id) {
     ingredients.remove(id);
+    _save();
+    notifyListeners();
+  }
+
+  void toggleIngredientFavorite(String id) {
+    final ing = ingredients[id];
+    if (ing == null) return;
+    ingredients[id] = ing.copyWith(favorite: !ing.favorite, updatedAt: DateTime.now());
     _save();
     notifyListeners();
   }
@@ -611,8 +933,22 @@ class AppState extends ChangeNotifier {
       name: 'MacroMate',
       version: '1.0.0',
     );
+    off.OpenFoodAPIConfiguration.globalLanguages = [
+      off.OpenFoodFactsLanguage.ENGLISH,
+      off.OpenFoodFactsLanguage.FRENCH,
+    ];
     _offConfigured = true;
   }
+
+  static const _offFields = [
+    off.ProductField.BARCODE,
+    off.ProductField.NAME,
+    off.ProductField.BRANDS,
+    off.ProductField.BRANDS_TAGS,
+    off.ProductField.NUTRIMENTS,
+    off.ProductField.IMAGE_FRONT_URL,
+    off.ProductField.QUANTITY,
+  ];
 
   Ingredient ingredientFromOFF(off.Product p) {
     final n = p.nutriments; // Nutriments?
@@ -666,6 +1002,63 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  // Returns null when OFF is unavailable, [] when no results, or a list on success.
+  // Routes through a Supabase Edge Function (off-search) to avoid CORS on Flutter Web.
+  Future<List<Ingredient>?> searchIngredientsByName(String query) async {
+    if (query.trim().isEmpty) return [];
+    try {
+      final res = await Supabase.instance.client.functions.invoke(
+        'off-search',
+        body: {'q': query.trim()},
+      );
+      final data = res.data;
+      final Map<String, dynamic> body;
+      if (data is Map<String, dynamic>) {
+        body = data;
+      } else if (data is String) {
+        body = jsonDecode(data) as Map<String, dynamic>;
+      } else {
+        return null;
+      }
+      if (body.containsKey('error')) return null;
+      final hits = (body['hits'] as List? ?? []);
+      final q = query.trim().toLowerCase();
+      return hits
+          .map((p) => p as Map<String, dynamic>)
+          .where((p) {
+            final name = (p['product_name'] as String? ?? '').toLowerCase();
+            return p['nutriments'] != null &&
+                   name.isNotEmpty &&
+                   name.contains(q);
+          })
+          .map(_ingredientFromRawOFF)
+          .toList();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Ingredient _ingredientFromRawOFF(Map<String, dynamic> p) {
+    final n = p['nutriments'] as Map<String, dynamic>? ?? {};
+    double num100(String key) => (n[key] as num?)?.toDouble() ?? 0.0;
+    final name = (p['product_name'] as String? ?? 'Unknown').trim();
+    // brands is a List in the search API response
+    final brandsList = p['brands'] as List?;
+    final brand = brandsList != null && brandsList.isNotEmpty
+        ? brandsList.first as String?
+        : null;
+    return Ingredient(
+      id: AppState.newId(),
+      name: brand != null && brand.isNotEmpty ? '$name ($brand)' : name,
+      protein100: num100('proteins_100g'),
+      carbs100: num100('carbohydrates_100g'),
+      fat100: num100('fat_100g'),
+      fiber100: num100('fiber_100g'),
+      kcal100: num100('energy-kcal_100g').toInt(),
+      source: 'off',
+    );
+  }
+
   Future<Ingredient?> lookupIngredientByBarcode(String barcode) async {
     // 1. Local cache direct match
     final localId = barcodeCache[barcode];
@@ -680,30 +1073,17 @@ class AppState extends ChangeNotifier {
         return ing;
       }
     }
-    // 3. OFF lookup
-    try {
-      _ensureOffConfig();
-      final cfg = off.ProductQueryConfiguration(
-        barcode,
-        version: off.ProductQueryVersion.v3,
-        language: off.OpenFoodFactsLanguage.ENGLISH,
-        fields: [
-          off.ProductField.BARCODE,
-          off.ProductField.NAME,
-          off.ProductField.BRANDS_TAGS,
-          off.ProductField.BRANDS,
-          off.ProductField.NUTRIMENTS,
-          off.ProductField.IMAGE_FRONT_URL,
-        ],
-      );
-      final result = await off.OpenFoodAPIClient.getProductV3(cfg);
-      if (result.product != null) {
-        return ingredientFromOFF(result.product!);
-      }
-      return null; // not found
-    } catch (_) {
-      return null; // network / parsing failure
-    }
+    // 3. OFF lookup — rethrows so callers can surface the real error
+    _ensureOffConfig();
+    final cfg = off.ProductQueryConfiguration(
+      barcode,
+      version: off.ProductQueryVersion.v3,
+      language: off.OpenFoodFactsLanguage.ENGLISH,
+      fields: _offFields,
+    );
+    final result = await off.OpenFoodAPIClient.getProductV3(cfg);
+    if (result.product != null) return ingredientFromOFF(result.product!);
+    return null;
   }
 
   Future<Ingredient> upsertIngredientFromBarcode(String barcode) async {
@@ -721,13 +1101,7 @@ class AppState extends ChangeNotifier {
         barcode,
         version: off.ProductQueryVersion.v3,
         language: off.OpenFoodFactsLanguage.ENGLISH,
-        fields: [
-          off.ProductField.BARCODE,
-          off.ProductField.NAME,
-          off.ProductField.BRANDS,
-          off.ProductField.QUANTITY,
-          off.ProductField.NUTRIMENTS,
-        ],
+        fields: _offFields,
       );
       final resp = await off.OpenFoodAPIClient.getProductV3(cfg);
       final p = resp.product;
@@ -929,6 +1303,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ───── Water tracking ─────────────────────────────────────────────────────
+  int waterForDay(String dayKey) => waterByDay[dayKey] ?? 0;
+
+  void addWater(int ml, String dayKey) {
+    waterByDay[dayKey] = waterForDay(dayKey) + ml;
+    _save();
+    notifyListeners();
+  }
+
+  void removeWater(int ml, String dayKey) {
+    final current = waterForDay(dayKey);
+    waterByDay[dayKey] = (current - ml).clamp(0, 99999);
+    _save();
+    notifyListeners();
+  }
+
+  // ───── Streak ──────────────────────────────────────────────────────────────
+  /// Returns the current consecutive-day logging streak.
+  int get currentStreak {
+    if (entriesByDay.isEmpty) return 0;
+    int streak = 0;
+    var day = DateTime.now();
+    while (true) {
+      final key = dayKeyFrom(day);
+      final entries = entriesByDay[key];
+      if (entries == null || entries.isEmpty) break;
+      streak++;
+      day = day.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
   // Added: reset state after logout
   void resetForLogout() {
     goals = Goals();
@@ -940,8 +1346,14 @@ class AppState extends ChangeNotifier {
     goalPresets.clear();
     activeGoalPresetId = null;
     barcodeCache.clear();
+    waterByDay.clear();
     _rollTimer?.cancel();
     _lastDayKey = null;
+    // Workout state
+    _workoutMode = false;
+    todayDayType = null;
+    _lastCheckInKey = null;
+    allSetLogs.clear();
     _save();
     notifyListeners();
   }

@@ -16,8 +16,7 @@ class ProgressScreen extends StatefulWidget {
 
 class _ProgressScreenState extends State<ProgressScreen> {
   WeightRange _range = WeightRange.d30;
-  int _page = 0; // 0 = latest window, increases as we go back in time
-  // Calories controls
+  int _page = 0;
   WeightRange _calRange = WeightRange.d30;
   int _calPage = 0;
 
@@ -26,37 +25,57 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final state = context.watch<AppState>();
     final all = [...state.weights]
       ..sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
-    // Calories dataset (daily totals)
     final calKeys = state.entriesByDay.keys.toList()..sort();
-    final cutoffCalorie = DateTime(
-      2025,
-      5,
-      7,
-    ); // exclude days before 7 May 2025
     final allCalories = <_CalEntry>[
       for (final dk in calKeys)
-        if (!DateTime.parse(dk).isBefore(cutoffCalorie))
-          _CalEntry(
-            day: DateTime.parse(dk),
-            kcal: state.totalsForDay(dk)['kcal'] as int,
-          ),
+        _CalEntry(
+          day: DateTime.parse(dk),
+          kcal: state.totalsForDay(dk)['kcal'] as int,
+        ),
     ];
     return SafeArea(
       bottom: false,
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(16, 12, 16, bottomReserve(context)),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'Progress',
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 16),
             _WeightCard(
               allWeights: all,
+              weightGoal: state.goals.weightGoal,
               range: _range,
               page: _page,
               onRangeChanged: (r) => setState(() {
                 _range = r;
-                _page = 0; // reset on range change
+                _page = 0;
               }),
               onPageChanged: (p) => setState(() => _page = p),
-              onAddWeight: () => _showAddWeightDialog(context),
+              onAddWeight: () => _showWeightDialog(context),
+              onSetGoal: () => _showWeightGoalDialog(context, state),
+              onEditWeight: (e) => _showWeightDialog(context, editing: e),
+              onDeleteWeight: (e) {
+                final app = context.read<AppState>();
+                app.deleteWeight(e.id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        'Deleted ${e.kg.toStringAsFixed(1)} kg entry'),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () => app.addWeight(e.kg,
+                          at: e.loggedAt, id: e.id),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             _CaloriesCard(
@@ -75,112 +94,253 @@ class _ProgressScreenState extends State<ProgressScreen> {
     );
   }
 
-  Future<void> _showAddWeightDialog(BuildContext context) async {
-    final controller = TextEditingController();
-    DateTime when = DateTime.now();
-    await showDialog(
+  // ── Add / Edit weight dialog ──────────────────────────────────────────────
+  Future<void> _showWeightDialog(
+    BuildContext context, {
+    WeightEntry? editing,
+  }) async {
+    final controller = TextEditingController(
+      text: editing != null ? editing.kg.toStringAsFixed(1) : '',
+    );
+    DateTime when = editing?.loggedAt ?? DateTime.now();
+
+    await showDialog<void>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Log weight'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setSt) => AlertDialog(
+          title: Text(editing == null ? 'Log weight' : 'Edit weight'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Weight (kg)',
+                  hintText: 'e.g. 78.4',
+                ),
               ),
-              decoration: const InputDecoration(
-                labelText: 'Weight (kg)',
-                hintText: 'e.g. 78.4',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Date: ${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}',
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Date: ${when.year}-${when.month.toString().padLeft(2, '0')}-${when.day.toString().padLeft(2, '0')}',
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: c,
-                      initialDate: when,
-                      firstDate: DateTime(2015),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) {
-                      when = DateTime(
-                        picked.year,
-                        picked.month,
-                        picked.day,
-                        when.hour,
-                        when.minute,
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: c,
+                        initialDate: when,
+                        firstDate: DateTime(2015),
+                        lastDate: DateTime.now()
+                            .add(const Duration(days: 365)),
                       );
-                      (c as Element).markNeedsBuild();
-                    }
-                  },
-                  child: const Text('Change'),
-                ),
-              ],
+                      if (picked != null) {
+                        setSt(() => when = DateTime(
+                              picked.year,
+                              picked.month,
+                              picked.day,
+                              when.hour,
+                              when.minute,
+                            ));
+                      }
+                    },
+                    child: const Text('Change'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final raw =
+                    controller.text.trim().replaceAll(',', '.');
+                final v = double.tryParse(raw);
+                if (v == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a valid number (e.g. 78.4)'),
+                    ),
+                  );
+                  return;
+                }
+                final app = context.read<AppState>();
+                if (editing == null) {
+                  app.addWeight(v, at: when);
+                  if (mounted) setState(() => _page = 0);
+                } else {
+                  app.updateWeight(editing.id, kg: v, at: when);
+                }
+                Navigator.pop(c);
+              },
+              child: const Text('Save'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Accept both comma and dot as decimal separator
-              final raw = controller.text.trim().replaceAll(',', '.');
-              final v = double.tryParse(raw);
-              if (v != null) {
-                context.read<AppState>().addWeight(v, at: when);
-                if (mounted) {
-                  setState(() {
-                    _page =
-                        0; // reset to latest window so new weight is visible
-                  });
-                }
-                Navigator.pop(c);
-              } else {
-                // Provide feedback instead of silently failing
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Enter a valid number (use a dot, e.g. 78.4)',
-                    ),
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
+    controller.dispose();
+  }
+
+  // ── Weight goal dialog ────────────────────────────────────────────────────
+  Future<void> _showWeightGoalDialog(
+      BuildContext context, AppState state) async {
+    final existing = state.goals.weightGoal;
+    // Pre-fill start weight from most recent logged weight if no existing goal
+    final latestWeight = state.weights.isNotEmpty ? state.weights.last.kg : null;
+    final startKgCtrl = TextEditingController(
+      text: existing?.startKg?.toStringAsFixed(1) ?? latestWeight?.toStringAsFixed(1) ?? '',
+    );
+    final targetKgCtrl = TextEditingController(
+      text: existing != null ? existing.targetKg.toStringAsFixed(1) : '',
+    );
+    DateTime? startDate = existing?.startDate ?? DateTime.now();
+    DateTime? targetDate = existing?.targetDate;
+
+    String _fmt(DateTime? d) => d == null
+        ? 'not set'
+        : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setSt) => AlertDialog(
+          title: const Text('Weight Goal'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: startKgCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Starting weight (kg)'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: Text('Date: ${_fmt(startDate)}', style: const TextStyle(fontSize: 13))),
+                    TextButton(
+                      onPressed: () async {
+                        final p = await showDatePicker(
+                          context: c,
+                          initialDate: startDate ?? DateTime.now(),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365 * 2)),
+                          lastDate: DateTime.now(),
+                        );
+                        if (p != null) setSt(() => startDate = p);
+                      },
+                      child: Text(startDate == null ? 'Pick' : 'Change'),
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                const Text('Target', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: targetKgCtrl,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Target weight (kg)', hintText: 'e.g. 72.0'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: Text('By: ${_fmt(targetDate)}', style: const TextStyle(fontSize: 13))),
+                    TextButton(
+                      onPressed: () async {
+                        final p = await showDatePicker(
+                          context: c,
+                          initialDate: targetDate ?? DateTime.now().add(const Duration(days: 60)),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                        );
+                        if (p != null) setSt(() => targetDate = p);
+                      },
+                      child: Text(targetDate == null ? 'Pick date' : 'Change'),
+                    ),
+                    if (targetDate != null)
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'Clear',
+                        onPressed: () => setSt(() => targetDate = null),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (existing != null)
+              TextButton(
+                onPressed: () { context.read<AppState>().setWeightGoal(null); Navigator.pop(c); },
+                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                child: const Text('Remove Goal'),
+              ),
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final target = double.tryParse(targetKgCtrl.text.trim().replaceAll(',', '.'));
+                if (target == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid target weight')));
+                  return;
+                }
+                final start = double.tryParse(startKgCtrl.text.trim().replaceAll(',', '.'));
+                context.read<AppState>().setWeightGoal(WeightGoal(
+                  targetKg: target,
+                  targetDate: targetDate,
+                  startKg: start,
+                  startDate: startDate,
+                ));
+                Navigator.pop(c);
+              },
+              child: const Text('Save Goal'),
+            ),
+          ],
+        ),
+      ),
+    );
+    startKgCtrl.dispose();
+    targetKgCtrl.dispose();
   }
 }
 
+
+
 class _WeightCard extends StatelessWidget {
-  final List<WeightEntry> allWeights; // full dataset
+  final List<WeightEntry> allWeights;
+  final WeightGoal? weightGoal;
   final WeightRange range;
-  final int page; // 0 = latest window
+  final int page;
   final ValueChanged<WeightRange> onRangeChanged;
   final ValueChanged<int> onPageChanged;
   final VoidCallback onAddWeight;
+  final VoidCallback onSetGoal;
+  final ValueChanged<WeightEntry> onEditWeight;
+  final ValueChanged<WeightEntry> onDeleteWeight;
   const _WeightCard({
     required this.allWeights,
+    this.weightGoal,
     required this.range,
     required this.page,
     required this.onRangeChanged,
     required this.onPageChanged,
     required this.onAddWeight,
+    required this.onSetGoal,
+    required this.onEditWeight,
+    required this.onDeleteWeight,
   });
 
   @override
@@ -188,45 +348,76 @@ class _WeightCard extends StatelessWidget {
     if (allWeights.isEmpty) {
       return _Card(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: Text(
                     'Weight Progress',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
                 ),
-                IconButton(onPressed: onAddWeight, icon: const Icon(Icons.add)),
+                Semantics(
+                  label: 'Log weight',
+                  child: IconButton(
+                    tooltip: 'Log weight',
+                    onPressed: onAddWeight,
+                    icon: const Icon(Icons.add),
+                  ),
+                ),
               ],
             ),
+            const SizedBox(height: 20),
+            const Icon(Icons.monitor_weight_outlined,
+                size: 52, color: Colors.black26),
             const SizedBox(height: 12),
             Text(
-              'No weights logged yet.',
-              style: Theme.of(context).textTheme.bodyMedium,
+              'No weight logged yet',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Colors.black45,
+                  ),
             ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: onAddWeight,
-              icon: const Icon(Icons.add),
-              label: const Text('Log Weight'),
+            const SizedBox(height: 6),
+            Text(
+              'Track your weight progress over time',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.black38,
+                  ),
+              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: onAddWeight,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Log Weight'),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: onSetGoal,
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Set Goal'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       );
     }
 
-    // Compute paging limits
     final maxPage = _maxPageForRange(allWeights, range);
     final clampedPage = range == WeightRange.all ? 0 : page.clamp(0, maxPage);
     if (clampedPage != page) onPageChanged(clampedPage);
 
     final filtered = _applyRange(allWeights, range, clampedPage);
-
-    // Smooth using full dataset (better edges), then filter smoothed values to range
     final smoothAll = _smoothCentered(allWeights, window: 7);
     final smoothFiltered = smoothAll
         .where(
@@ -236,25 +427,21 @@ class _WeightCard extends StatelessWidget {
         )
         .toList();
 
-    // Raw (unsmoothed) start/end for true delta
     final startRaw = filtered.first.kg;
     final endRaw = filtered.last.kg;
     final deltaRaw = endRaw - startRaw;
-
     final startSm = smoothFiltered.first.kg;
     final endSm = smoothFiltered.last.kg;
     final deltaSm = endSm - startSm;
 
-    final yBounds = _boundsFor(filtered, smoothFiltered);
+    final yBounds = _boundsFor(filtered, smoothFiltered, weightGoal);
 
-    final canPrev =
-        range != WeightRange.all && clampedPage < maxPage; // go back in time
-    final canNext =
-        range != WeightRange.all &&
-        clampedPage > 0; // forward (towards present)
+    final canPrev = range != WeightRange.all && clampedPage < maxPage;
+    final canNext = range != WeightRange.all && clampedPage > 0;
 
     return _Card(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
@@ -262,12 +449,17 @@ class _WeightCard extends StatelessWidget {
                 child: Text(
                   'Weight Progress',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
               ),
               IconButton(
-                tooltip: 'Add',
+                tooltip: weightGoal != null ? 'Edit Goal' : 'Set Goal',
+                icon: Icon(weightGoal != null ? Icons.flag : Icons.flag_outlined, color: AppColors.primary),
+                onPressed: onSetGoal,
+              ),
+              IconButton(
+                tooltip: 'Add Weight',
                 icon: const Icon(Icons.add),
                 onPressed: onAddWeight,
               ),
@@ -294,40 +486,92 @@ class _WeightCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatTile(
-                  label: 'Starting',
-                  value: '${startRaw.toStringAsFixed(1)} kg',
-                ),
-              ),
-              Expanded(
-                child: _StatTile(
                   label: 'Current',
                   value: '${endRaw.toStringAsFixed(1)} kg',
                 ),
               ),
-              // Removed redundant 'Change' tile (delta shown below in chips)
+              Expanded(
+                child: GestureDetector(
+                  onTap: onSetGoal,
+                  behavior: HitTestBehavior.opaque,
+                  child: _StatTile(
+                    label: 'Goal',
+                    value: weightGoal != null
+                        ? '${weightGoal!.targetKg.toStringAsFixed(1)} kg'
+                        : 'Set Goal',
+                    valueColor: AppColors.primary,
+                  ),
+                ),
+              ),
+              if (weightGoal?.targetDate != null && allWeights.isNotEmpty)
+                Expanded(
+                  child: _StatTile(
+                    label: 'On Track',
+                    value: '${_targetToday(allWeights, weightGoal!).toStringAsFixed(1)} kg',
+                    valueColor: AppColors.success,
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.center,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _DeltaChip(
-                  label: 'True progress',
-                  value: _deltaString(deltaRaw),
-                ),
-                const SizedBox(height: 8),
-                _DeltaChip(
-                  label: 'Smoothed progress',
-                  value: _deltaString(deltaSm),
-                ),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _DeltaChip(
+                label: 'True',
+                value: _deltaString(deltaRaw),
+              ),
+              _DeltaChip(
+                label: 'Smoothed',
+                value: _deltaString(deltaSm),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text(
+            'History',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 8),
+          ...filtered.reversed.map((e) => Dismissible(
+                key: Key(e.id),
+                direction: DismissDirection.endToStart,
+                onDismissed: (_) => onDeleteWeight(e),
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: AppColors.danger,
+                  child: const Icon(Icons.delete_outline, color: Colors.white),
+                ),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  title: Text('${e.kg.toStringAsFixed(1)} kg',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(_formatFullDay(e.loggedAt)),
+                  trailing:
+                      const Icon(Icons.chevron_right, color: Colors.black26),
+                  onTap: () => onEditWeight(e),
+                ),
+              )),
         ],
       ),
     );
+  }
+
+  static double _targetToday(List<WeightEntry> all, WeightGoal goal) {
+    if (goal.targetDate == null) return goal.targetKg;
+    final startDate = goal.startDate ?? (all.isNotEmpty ? all.first.loggedAt : DateTime.now());
+    final startKg = goal.startKg ?? (all.isNotEmpty ? all.first.kg : goal.targetKg);
+    final end = goal.targetDate!;
+    final totalDays = end.difference(startDate).inDays;
+    if (totalDays <= 0) return goal.targetKg;
+    final elapsed = DateTime.now().difference(startDate).inDays.clamp(0, totalDays);
+    return startKg + (goal.targetKg - startKg) * elapsed / totalDays;
   }
 
   static String _deltaString(double d) {
@@ -338,9 +582,14 @@ class _WeightCard extends StatelessWidget {
   static ({double min, double max}) _boundsFor(
     List<WeightEntry> raw,
     List<WeightEntry> smooth,
+    WeightGoal? goal,
   ) {
     final all = [...raw, ...smooth];
     double minY = all.first.kg, maxY = all.first.kg;
+    if (goal != null) {
+      minY = math.min(minY, goal.targetKg);
+      maxY = math.max(maxY, goal.targetKg);
+    }
     for (final e in all) {
       minY = math.min(minY, e.kg);
       maxY = math.max(maxY, e.kg);
@@ -350,10 +599,10 @@ class _WeightCard extends StatelessWidget {
   }
 
   static int _windowDays(WeightRange r) => switch (r) {
-    WeightRange.d7 => 7,
-    WeightRange.d30 => 30,
-    WeightRange.all => 0,
-  };
+        WeightRange.d7 => 7,
+        WeightRange.d30 => 30,
+        WeightRange.all => 0,
+      };
 
   static int _maxPageForRange(List<WeightEntry> all, WeightRange r) {
     if (r == WeightRange.all || all.isEmpty) return 0;
@@ -371,9 +620,10 @@ class _WeightCard extends StatelessWidget {
     if (range == WeightRange.all) return all;
 
     final w = _windowDays(range);
-    final last = all.last.loggedAt.subtract(Duration(days: w * page));
-    final from = last.subtract(Duration(days: w));
-    final to = last;
+    final lastDate = all.last.loggedAt;
+    final lastWindowEnd = DateTime(lastDate.year, lastDate.month, lastDate.day, 23, 59, 59);
+    final to = lastWindowEnd.subtract(Duration(days: w * page));
+    final from = to.subtract(Duration(days: w));
     return all
         .where((e) => !e.loggedAt.isBefore(from) && !e.loggedAt.isAfter(to))
         .toList();
@@ -411,6 +661,76 @@ class _WeightCard extends StatelessWidget {
         .toList();
     final primary = AppColors.primary;
     final smoothColor = Colors.black.withValues(alpha: .45);
+
+    final bars = [
+      LineChartBarData(
+        spots: smoothSpots,
+        isCurved: true,
+        curveSmoothness: 0.2,
+        preventCurveOverShooting: true,
+        color: smoothColor,
+        barWidth: 3.5,
+        dotData: const FlDotData(show: false),
+      ),
+      LineChartBarData(
+        spots: rawSpots,
+        isCurved: true,
+        curveSmoothness: 0.2,
+        preventCurveOverShooting: true,
+        color: primary,
+        barWidth: 3,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          color: primary.withValues(alpha: .15),
+        ),
+      ),
+    ];
+
+    if (weightGoal != null && rawSpots.isNotEmpty) {
+      if (weightGoal!.targetDate != null && allWeights.isNotEmpty) {
+        // Trajectory line: from goal start (or first weight) → target
+        final goalStartDate = weightGoal!.startDate ?? allWeights.first.loggedAt;
+        final startX = goalStartDate.difference(base).inDays.toDouble();
+        final endX = weightGoal!.targetDate!.difference(base).inDays.toDouble();
+        final startKg = weightGoal!.startKg ?? allWeights.first.kg;
+        final endKg = weightGoal!.targetKg;
+        final chartLeft = rawSpots.first.x;
+        final chartRight = rawSpots.last.x;
+
+        double lerpKg(double x) {
+          if (endX == startX) return endKg;
+          return startKg + (endKg - startKg) * (x - startX) / (endX - startX);
+        }
+
+        final visStart = startX.clamp(chartLeft, chartRight);
+        final visEnd = endX.clamp(chartLeft, chartRight);
+        if (visStart < visEnd) {
+          bars.add(LineChartBarData(
+            spots: [FlSpot(visStart, lerpKg(visStart)), FlSpot(visEnd, lerpKg(visEnd))],
+            isCurved: false,
+            color: AppColors.success,
+            barWidth: 2,
+            dashArray: [8, 4],
+            dotData: const FlDotData(show: false),
+          ));
+        }
+      } else {
+        // No target date — flat horizontal reference line
+        bars.add(LineChartBarData(
+          spots: [
+            FlSpot(rawSpots.first.x, weightGoal!.targetKg),
+            FlSpot(rawSpots.last.x, weightGoal!.targetKg),
+          ],
+          isCurved: false,
+          color: AppColors.success,
+          barWidth: 2,
+          dashArray: [8, 4],
+          dotData: const FlDotData(show: false),
+        ));
+      }
+    }
+
     return LineChartData(
       minY: y.min,
       maxY: y.max,
@@ -428,14 +748,11 @@ class _WeightCard extends StatelessWidget {
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 24,
-            interval: (rawSpots.isEmpty
-                ? 1
-                : (rawSpots.last.x / 4).clamp(1, 60)),
+            interval: (rawSpots.isEmpty ? 1 : (rawSpots.last.x / 4).clamp(1, 60)),
             getTitlesWidget: (v, meta) => Text(
               _formatDay(base.add(Duration(days: v.round()))),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontSize: 11),
+              style:
+                  Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
             ),
           ),
         ),
@@ -445,9 +762,8 @@ class _WeightCard extends StatelessWidget {
             reservedSize: 36,
             getTitlesWidget: (v, meta) => Text(
               v.toStringAsFixed(0),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(fontSize: 11),
+              style:
+                  Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
             ),
           ),
         ),
@@ -464,32 +780,18 @@ class _WeightCard extends StatelessWidget {
               .toList(),
         ),
       ),
-      lineBarsData: [
-        // Smoothed line
-        LineChartBarData(
-          spots: smoothSpots,
-          isCurved: true,
-          color: smoothColor,
-          barWidth: 3.5,
-          dotData: const FlDotData(show: false),
-        ),
-        // Raw line with area fill
-        LineChartBarData(
-          spots: rawSpots,
-          isCurved: true,
-          color: primary,
-          barWidth: 3,
-          dotData: const FlDotData(show: false),
-          belowBarData: BarAreaData(
-            show: true,
-            color: primary.withValues(alpha: .15),
-          ),
-        ),
-      ],
+      lineBarsData: bars,
     );
   }
 
   static String _formatDay(DateTime d) => '${d.month}/${d.day}';
+  static String _formatFullDay(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
 }
 
 /* --------------------------- CALORIES CARD --------------------------- */
@@ -851,7 +1153,8 @@ class _RangeWithPager extends StatelessWidget {
 class _StatTile extends StatelessWidget {
   final String label;
   final String value;
-  const _StatTile({required this.label, required this.value});
+  final Color? valueColor;
+  const _StatTile({required this.label, required this.value, this.valueColor});
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -876,7 +1179,10 @@ class _StatTile extends StatelessWidget {
             value,
             style: Theme.of(
               context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: valueColor,
+                ),
           ),
         ],
       ),
