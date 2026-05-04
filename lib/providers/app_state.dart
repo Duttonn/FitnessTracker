@@ -285,27 +285,32 @@ class WeightEntry {
 
 /// A weight target to reach by a given date.
 class WeightGoal {
-  final double targetKg;
-  final DateTime? targetDate;
-  final double? startKg;    // weight at start of goal period
-  final DateTime? startDate; // when the goal period begins
+  final double targetKg;        // used as target for fixed mode; ignored for rate mode
+  final DateTime? targetDate;   // null = rate-based (indefinite)
+  final double? startKg;
+  final DateTime? startDate;
+  final double? rateKgPerWeek;  // non-null = indefinite rate goal (positive = gain, negative = loss)
   const WeightGoal({
     required this.targetKg,
     this.targetDate,
     this.startKg,
     this.startDate,
+    this.rateKgPerWeek,
   });
+  bool get isRateBased => rateKgPerWeek != null;
   Map<String, dynamic> toJson() => {
     'targetKg': targetKg,
     'targetDate': targetDate?.toIso8601String(),
     'startKg': startKg,
     'startDate': startDate?.toIso8601String(),
+    'rateKgPerWeek': rateKgPerWeek,
   };
   factory WeightGoal.fromJson(Map<String, dynamic> m) => WeightGoal(
     targetKg: (m['targetKg'] as num).toDouble(),
     targetDate: m['targetDate'] != null ? DateTime.parse(m['targetDate'] as String) : null,
     startKg: m['startKg'] != null ? (m['startKg'] as num).toDouble() : null,
     startDate: m['startDate'] != null ? DateTime.parse(m['startDate'] as String) : null,
+    rateKgPerWeek: m['rateKgPerWeek'] != null ? (m['rateKgPerWeek'] as num).toDouble() : null,
   );
 }
 

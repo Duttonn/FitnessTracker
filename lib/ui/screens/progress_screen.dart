@@ -199,8 +199,12 @@ class _ProgressScreenState extends State<ProgressScreen> {
     final sortedWeights = [...state.weights]
       ..sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
 
+    bool isRateMode = existing?.isRateBased ?? false;
     final targetKgCtrl = TextEditingController(
-      text: existing != null ? existing.targetKg.toStringAsFixed(1) : '',
+      text: existing != null && !existing.isRateBased ? existing.targetKg.toStringAsFixed(1) : '',
+    );
+    final rateCtrl = TextEditingController(
+      text: existing?.rateKgPerWeek?.toStringAsFixed(2) ?? '',
     );
     final manualKgCtrl = TextEditingController(
       text: existing?.startKg?.toStringAsFixed(1) ?? '',
@@ -336,38 +340,66 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   ),
                 ],
                 const Divider(height: 24),
-                const Text('Target', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: targetKgCtrl,
-                  autofocus: resolved.needsManual ? false : true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Target weight (kg)', hintText: 'e.g. 80.0'),
-                ),
-                const SizedBox(height: 8),
+                // Mode toggle
                 Row(
                   children: [
-                    Expanded(child: Text('By: ${_fmt(targetDate)}', style: const TextStyle(fontSize: 13))),
-                    TextButton(
-                      onPressed: () async {
-                        final p = await showDatePicker(
-                          context: c,
-                          initialDate: targetDate ?? DateTime.now().add(const Duration(days: 60)),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
-                        );
-                        if (p != null) setSt(() => targetDate = p);
-                      },
-                      child: Text(targetDate == null ? 'Pick date' : 'Change'),
+                    const Text('Target', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
+                    const Spacer(),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Fixed weight')),
+                        ButtonSegment(value: true, label: Text('Weekly rate')),
+                      ],
+                      selected: {isRateMode},
+                      onSelectionChanged: (s) => setSt(() => isRateMode = s.first),
+                      style: ButtonStyle(visualDensity: VisualDensity.compact),
                     ),
-                    if (targetDate != null)
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        tooltip: 'Clear',
-                        onPressed: () => setSt(() => targetDate = null),
-                      ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                if (isRateMode) ...[
+                  TextField(
+                    controller: rateCtrl,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Rate (kg/week)',
+                      hintText: 'e.g. +0.15 or -0.20',
+                      helperText: 'Positive = gain, negative = loss',
+                    ),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: targetKgCtrl,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Target weight (kg)', hintText: 'e.g. 80.0'),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: Text('By: ${_fmt(targetDate)}', style: const TextStyle(fontSize: 13))),
+                      TextButton(
+                        onPressed: () async {
+                          final p = await showDatePicker(
+                            context: c,
+                            initialDate: targetDate ?? DateTime.now().add(const Duration(days: 60)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                          );
+                          if (p != null) setSt(() => targetDate = p);
+                        },
+                        child: Text(targetDate == null ? 'Pick date' : 'Change'),
+                      ),
+                      if (targetDate != null)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Clear',
+                          onPressed: () => setSt(() => targetDate = null),
+                        ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -381,11 +413,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
             TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final target = double.tryParse(targetKgCtrl.text.trim().replaceAll(',', '.'));
-                if (target == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid target weight')));
-                  return;
-                }
                 final startKg = resolved.needsManual
                     ? double.tryParse(manualKgCtrl.text.trim().replaceAll(',', '.'))
                     : resolved.kg;
@@ -393,12 +420,31 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your starting weight')));
                   return;
                 }
-                context.read<AppState>().setWeightGoal(WeightGoal(
-                  targetKg: target,
-                  targetDate: targetDate,
-                  startKg: startKg,
-                  startDate: startDate,
-                ));
+                if (isRateMode) {
+                  final rate = double.tryParse(rateCtrl.text.trim().replaceAll(',', '.'));
+                  if (rate == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid rate (e.g. 0.15)')));
+                    return;
+                  }
+                  context.read<AppState>().setWeightGoal(WeightGoal(
+                    targetKg: startKg, // unused for rate mode but required
+                    startKg: startKg,
+                    startDate: startDate,
+                    rateKgPerWeek: rate,
+                  ));
+                } else {
+                  final target = double.tryParse(targetKgCtrl.text.trim().replaceAll(',', '.'));
+                  if (target == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid target weight')));
+                    return;
+                  }
+                  context.read<AppState>().setWeightGoal(WeightGoal(
+                    targetKg: target,
+                    targetDate: targetDate,
+                    startKg: startKg,
+                    startDate: startDate,
+                  ));
+                }
                 Navigator.pop(c);
               },
               child: const Text('Save Goal'),
@@ -409,6 +455,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     );
     targetKgCtrl.dispose();
     manualKgCtrl.dispose();
+    rateCtrl.dispose();
   }
 }
 
@@ -591,14 +638,16 @@ class _WeightCard extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   child: _StatTile(
                     label: 'Goal',
-                    value: weightGoal != null
-                        ? '${weightGoal!.targetKg.toStringAsFixed(1)} kg'
-                        : 'Set Goal',
+                    value: weightGoal == null
+                        ? 'Set Goal'
+                        : weightGoal!.isRateBased
+                            ? '${weightGoal!.rateKgPerWeek! >= 0 ? '+' : ''}${weightGoal!.rateKgPerWeek!.toStringAsFixed(2)} kg/w'
+                            : '${weightGoal!.targetKg.toStringAsFixed(1)} kg',
                     valueColor: AppColors.primary,
                   ),
                 ),
               ),
-              if (weightGoal?.targetDate != null && allWeights.isNotEmpty)
+              if (weightGoal != null && allWeights.isNotEmpty)
                 Expanded(
                   child: _StatTile(
                     label: 'On Track',
@@ -659,11 +708,14 @@ class _WeightCard extends StatelessWidget {
   }
 
   static double _targetToday(List<WeightEntry> all, WeightGoal goal) {
-    if (goal.targetDate == null) return goal.targetKg;
     final startDate = goal.startDate ?? (all.isNotEmpty ? all.first.loggedAt : DateTime.now());
     final startKg = goal.startKg ?? (all.isNotEmpty ? all.first.kg : goal.targetKg);
-    final end = goal.targetDate!;
-    final totalDays = end.difference(startDate).inDays;
+    if (goal.isRateBased) {
+      final weeks = DateTime.now().difference(startDate).inDays / 7.0;
+      return startKg + goal.rateKgPerWeek! * weeks;
+    }
+    if (goal.targetDate == null) return goal.targetKg;
+    final totalDays = goal.targetDate!.difference(startDate).inDays;
     if (totalDays <= 0) return goal.targetKg;
     final elapsed = DateTime.now().difference(startDate).inDays.clamp(0, totalDays);
     return startKg + (goal.targetKg - startKg) * elapsed / totalDays;
@@ -681,13 +733,37 @@ class _WeightCard extends StatelessWidget {
   ) {
     final all = [...raw, ...smooth];
     double minY = all.first.kg, maxY = all.first.kg;
-    if (goal != null) {
-      minY = math.min(minY, goal.targetKg);
-      maxY = math.max(maxY, goal.targetKg);
-    }
     for (final e in all) {
       minY = math.min(minY, e.kg);
       maxY = math.max(maxY, e.kg);
+    }
+    // Include the goal trajectory only if it falls within the visible window
+    if (goal != null && raw.isNotEmpty) {
+      final windowStart = raw.first.loggedAt;
+      final windowEnd = raw.last.loggedAt;
+      final startDate = goal.startDate ?? windowStart;
+      final startKg = goal.startKg ?? raw.first.kg;
+
+      double goalKgAt(DateTime d) {
+        if (goal.isRateBased) {
+          return startKg + goal.rateKgPerWeek! * d.difference(startDate).inDays / 7.0;
+        }
+        if (goal.targetDate == null) return goal.targetKg;
+        final total = goal.targetDate!.difference(startDate).inDays;
+        if (total <= 0) return goal.targetKg;
+        final elapsed = d.difference(startDate).inDays.clamp(0, total);
+        return startKg + (goal.targetKg - startKg) * elapsed / total;
+      }
+
+      // Clamp dates to window and compute kg at those points
+      for (final d in [windowStart, windowEnd]) {
+        if (!d.isBefore(startDate) &&
+            (goal.targetDate == null || !d.isAfter(goal.targetDate!))) {
+          final kg = goalKgAt(d);
+          minY = math.min(minY, kg);
+          maxY = math.max(maxY, kg);
+        }
+      }
     }
     return (min: minY * 0.99, max: maxY * 1.01);
   }
@@ -782,21 +858,36 @@ class _WeightCard extends StatelessWidget {
     ];
 
     if (weightGoal != null && rawSpots.isNotEmpty) {
-      if (weightGoal!.targetDate != null && allWeights.isNotEmpty) {
-        // Trajectory line: from goal start (or first weight) → target
-        final goalStartDate = weightGoal!.startDate ?? allWeights.first.loggedAt;
-        final startX = goalStartDate.difference(base).inDays.toDouble();
-        final endX = weightGoal!.targetDate!.difference(base).inDays.toDouble();
-        final startKg = weightGoal!.startKg ?? allWeights.first.kg;
-        final endKg = weightGoal!.targetKg;
-        final chartLeft = rawSpots.first.x;
-        final chartRight = rawSpots.last.x;
+      final goalStartDate = weightGoal!.startDate ?? allWeights.first.loggedAt;
+      final startKg = weightGoal!.startKg ?? allWeights.first.kg;
+      final startX = goalStartDate.difference(base).inDays.toDouble();
+      final chartLeft = rawSpots.first.x;
+      final chartRight = rawSpots.last.x;
 
+      if (weightGoal!.isRateBased) {
+        // Indefinite rate: trajectory extends across the visible window
+        double rateKg(double x) =>
+            startKg + weightGoal!.rateKgPerWeek! * (x - startX) / 7.0;
+        final visStart = startX.clamp(chartLeft, chartRight);
+        final visEnd = chartRight;
+        if (visStart <= visEnd) {
+          bars.add(LineChartBarData(
+            spots: [FlSpot(visStart, rateKg(visStart)), FlSpot(visEnd, rateKg(visEnd))],
+            isCurved: false,
+            color: AppColors.success,
+            barWidth: 2,
+            dashArray: [8, 4],
+            dotData: const FlDotData(show: false),
+          ));
+        }
+      } else if (weightGoal!.targetDate != null) {
+        // Fixed target: from goal start → target date
+        final endX = weightGoal!.targetDate!.difference(base).inDays.toDouble();
+        final endKg = weightGoal!.targetKg;
         double lerpKg(double x) {
           if (endX == startX) return endKg;
           return startKg + (endKg - startKg) * (x - startX) / (endX - startX);
         }
-
         final visStart = startX.clamp(chartLeft, chartRight);
         final visEnd = endX.clamp(chartLeft, chartRight);
         if (visStart < visEnd) {
@@ -810,12 +901,9 @@ class _WeightCard extends StatelessWidget {
           ));
         }
       } else {
-        // No target date — flat horizontal reference line
+        // No target date, no rate — flat reference line at target kg
         bars.add(LineChartBarData(
-          spots: [
-            FlSpot(rawSpots.first.x, weightGoal!.targetKg),
-            FlSpot(rawSpots.last.x, weightGoal!.targetKg),
-          ],
+          spots: [FlSpot(chartLeft, weightGoal!.targetKg), FlSpot(chartRight, weightGoal!.targetKg)],
           isCurved: false,
           color: AppColors.success,
           barWidth: 2,
