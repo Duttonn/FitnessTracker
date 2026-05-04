@@ -196,16 +196,54 @@ class _ProgressScreenState extends State<ProgressScreen> {
   Future<void> _showWeightGoalDialog(
       BuildContext context, AppState state) async {
     final existing = state.goals.weightGoal;
-    // Pre-fill start weight from most recent logged weight if no existing goal
-    final latestWeight = state.weights.isNotEmpty ? state.weights.last.kg : null;
-    final startKgCtrl = TextEditingController(
-      text: existing?.startKg?.toStringAsFixed(1) ?? latestWeight?.toStringAsFixed(1) ?? '',
-    );
+    final sortedWeights = [...state.weights]
+      ..sort((a, b) => a.loggedAt.compareTo(b.loggedAt));
+
     final targetKgCtrl = TextEditingController(
       text: existing != null ? existing.targetKg.toStringAsFixed(1) : '',
     );
-    DateTime? startDate = existing?.startDate ?? DateTime.now();
+    final manualKgCtrl = TextEditingController(
+      text: existing?.startKg?.toStringAsFixed(1) ?? '',
+    );
+    DateTime startDate = existing?.startDate ?? DateTime.now();
     DateTime? targetDate = existing?.targetDate;
+
+    // Resolve start weight from a given date against the weight history.
+    // Returns (kg, isEstimated, needsManual).
+    ({double? kg, bool estimated, bool needsManual}) resolveStart(DateTime date) {
+      if (sortedWeights.isEmpty) return (kg: null, estimated: false, needsManual: true);
+
+      final dayStr = '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+
+      // Exact match on that day
+      for (final w in sortedWeights) {
+        final ws = '${w.loggedAt.year}-${w.loggedAt.month.toString().padLeft(2,'0')}-${w.loggedAt.day.toString().padLeft(2,'0')}';
+        if (ws == dayStr) return (kg: w.kg, estimated: false, needsManual: false);
+      }
+
+      // Interpolate between nearest before/after
+      WeightEntry? before, after;
+      for (final w in sortedWeights) {
+        if (!w.loggedAt.isAfter(date)) {
+          if (before == null || w.loggedAt.isAfter(before.loggedAt)) before = w;
+        } else {
+          if (after == null || w.loggedAt.isBefore(after.loggedAt)) after = w;
+        }
+      }
+      if (before != null && after != null) {
+        final total = after.loggedAt.difference(before.loggedAt).inSeconds;
+        final elapsed = date.difference(before.loggedAt).inSeconds;
+        final kg = total > 0
+            ? before.kg + (after.kg - before.kg) * elapsed / total
+            : before.kg;
+        return (kg: kg, estimated: true, needsManual: false);
+      }
+      if (before != null) return (kg: before.kg, estimated: true, needsManual: false);
+      if (after != null) return (kg: after.kg, estimated: true, needsManual: false);
+      return (kg: null, estimated: false, needsManual: true);
+    }
+
+    var resolved = resolveStart(startDate);
 
     String _fmt(DateTime? d) => d == null
         ? 'not set'
@@ -222,12 +260,6 @@ class _ProgressScreenState extends State<ProgressScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: startKgCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Starting weight (kg)'),
-                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -236,24 +268,81 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       onPressed: () async {
                         final p = await showDatePicker(
                           context: c,
-                          initialDate: startDate ?? DateTime.now(),
+                          initialDate: startDate,
                           firstDate: DateTime.now().subtract(const Duration(days: 365 * 2)),
                           lastDate: DateTime.now(),
                         );
-                        if (p != null) setSt(() => startDate = p);
+                        if (p != null) setSt(() {
+                          startDate = p;
+                          resolved = resolveStart(p);
+                        });
                       },
-                      child: Text(startDate == null ? 'Pick' : 'Change'),
+                      child: const Text('Change'),
                     ),
                   ],
                 ),
+                const SizedBox(height: 6),
+                if (resolved.needsManual) ...[
+                  TextField(
+                    controller: manualKgCtrl,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Starting weight (kg)',
+                      hintText: 'No data for this date — enter manually',
+                      helperText: 'No recorded weight found for this date',
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: resolved.estimated
+                          ? Colors.orange.withValues(alpha: .08)
+                          : AppColors.success.withValues(alpha: .08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: resolved.estimated
+                            ? Colors.orange.withValues(alpha: .3)
+                            : AppColors.success.withValues(alpha: .3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          resolved.estimated ? Icons.auto_graph : Icons.check_circle_outline,
+                          size: 16,
+                          color: resolved.estimated ? Colors.orange : AppColors.success,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${resolved.kg!.toStringAsFixed(1)} kg',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: resolved.estimated ? Colors.orange.shade800 : AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          resolved.estimated ? '(estimated)' : '(recorded)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: resolved.estimated ? Colors.orange.shade700 : AppColors.success,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const Divider(height: 24),
                 const Text('Target', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black54)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: targetKgCtrl,
-                  autofocus: true,
+                  autofocus: resolved.needsManual ? false : true,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Target weight (kg)', hintText: 'e.g. 72.0'),
+                  decoration: const InputDecoration(labelText: 'Target weight (kg)', hintText: 'e.g. 80.0'),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -297,11 +386,17 @@ class _ProgressScreenState extends State<ProgressScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid target weight')));
                   return;
                 }
-                final start = double.tryParse(startKgCtrl.text.trim().replaceAll(',', '.'));
+                final startKg = resolved.needsManual
+                    ? double.tryParse(manualKgCtrl.text.trim().replaceAll(',', '.'))
+                    : resolved.kg;
+                if (startKg == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your starting weight')));
+                  return;
+                }
                 context.read<AppState>().setWeightGoal(WeightGoal(
                   targetKg: target,
                   targetDate: targetDate,
-                  startKg: start,
+                  startKg: startKg,
                   startDate: startDate,
                 ));
                 Navigator.pop(c);
@@ -312,8 +407,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
         ),
       ),
     );
-    startKgCtrl.dispose();
     targetKgCtrl.dispose();
+    manualKgCtrl.dispose();
   }
 }
 
@@ -594,7 +689,7 @@ class _WeightCard extends StatelessWidget {
       minY = math.min(minY, e.kg);
       maxY = math.max(maxY, e.kg);
     }
-    return (min: minY * 0.90, max: maxY * 1.10);
+    return (min: minY * 0.99, max: maxY * 1.01);
   }
 
   static int _windowDays(WeightRange r) => switch (r) {
