@@ -594,8 +594,7 @@ class _WeightCard extends StatelessWidget {
       minY = math.min(minY, e.kg);
       maxY = math.max(maxY, e.kg);
     }
-    final pad = (maxY - minY).clamp(0.8, 4.0);
-    return (min: minY - pad, max: maxY + pad);
+    return (min: minY * 0.90, max: maxY * 1.10);
   }
 
   static int _windowDays(WeightRange r) => switch (r) {
