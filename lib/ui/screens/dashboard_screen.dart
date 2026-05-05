@@ -195,7 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -251,7 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             // ── Calorie hero card ──────────────────────────────────────────
             _Card(
@@ -300,18 +300,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             // ── Quick Actions ──────────────────────────────────────────────
+            _QuickBtn(
+              icon: Icons.add_rounded,
+              label: 'Log Food',
+              onTap: _openQuickAdd,
+              primary: true,
+              fullWidth: true,
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
-                _QuickBtn(
-                  icon: Icons.add_circle_outline_rounded,
-                  label: 'Quick Add',
-                  onTap: _openQuickAdd,
-                  primary: true,
-                ),
-                const SizedBox(width: 8),
                 _QuickBtn(
                   icon: Icons.kitchen_rounded,
                   label: 'Ingredients',
@@ -563,33 +564,41 @@ class _QuickBtn extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.primary = false,
+    this.fullWidth = false,
   });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool primary;
+  final bool fullWidth;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      child: Semantics(
-        button: true,
-        label: label,
+
+    Widget content = Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
         child: InkWell(
           onTap: () {
             HapticFeedback.selectionClick();
             onTap();
           },
           borderRadius: BorderRadius.circular(14),
+          splashColor: primary
+              ? Colors.white.withValues(alpha: .15)
+              : AppColors.primary.withValues(alpha: .08),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+            width: fullWidth ? double.infinity : null,
+            padding: fullWidth
+                ? const EdgeInsets.symmetric(vertical: 15, horizontal: 20)
+                : const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
             decoration: BoxDecoration(
               color: primary
                   ? AppColors.primary
-                  : (isDark
-                      ? AppColors.cardDark
-                      : Colors.white),
+                  : (isDark ? AppColors.cardDark : Colors.white),
               borderRadius: BorderRadius.circular(14),
               border: primary
                   ? null
@@ -601,43 +610,58 @@ class _QuickBtn extends StatelessWidget {
               boxShadow: primary
                   ? [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: .3),
-                        blurRadius: 12,
+                        color: AppColors.primary.withValues(alpha: .28),
+                        blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
                     ]
                   : null,
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: primary
-                      ? Colors.white
-                      : (isDark ? Colors.white70 : Colors.black87),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: primary
-                        ? Colors.white
-                        : (isDark ? Colors.white70 : Colors.black87),
+            child: fullWidth
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 20, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 20,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : Colors.black54,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
           ),
         ),
       ),
     );
+
+    return fullWidth ? content : Expanded(child: content);
   }
 }
 
@@ -652,7 +676,7 @@ class _Card extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: appCardDecoration(isDark: isDark),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: child,
     );
   }

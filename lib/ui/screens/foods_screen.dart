@@ -507,7 +507,24 @@ class FoodsScreenState extends State<FoodsScreen> {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (ctx) => _AddIngredientSheet(state: context.read<AppState>()),
+        builder: (ctx) => _AddIngredientSheet(
+          state: context.read<AppState>(),
+          onManualEntry: (query) => _showIngredientForm(
+            context,
+            initial: query.isEmpty
+                ? null
+                : Ingredient(
+                    id: '',
+                    name: query,
+                    protein100: 0,
+                    carbs100: 0,
+                    fat100: 0,
+                    fiber100: 0,
+                    kcal100: 0,
+                    source: 'manual',
+                  ),
+          ),
+        ),
       );
     } else {
       await _showIngredientForm(context, initial: initial);
@@ -1457,7 +1474,8 @@ class _RecurrenceBadge extends StatelessWidget {
 
 class _AddIngredientSheet extends StatefulWidget {
   final AppState state;
-  const _AddIngredientSheet({required this.state});
+  final void Function(String query)? onManualEntry;
+  const _AddIngredientSheet({required this.state, this.onManualEntry});
   @override
   State<_AddIngredientSheet> createState() => _AddIngredientSheetState();
 }
@@ -1536,65 +1554,9 @@ class _AddIngredientSheetState extends State<_AddIngredientSheet> {
                   title: const Text('Enter macros manually', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(_query.isNotEmpty ? 'Create "${_query}"' : 'Fill in nutrition info yourself', style: const TextStyle(fontSize: 12)),
                   onTap: () {
+                    final q = _query;
                     Navigator.pop(context);
-                    // Re-open the form sheet via parent
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (cxt) {
-                        final state = widget.state;
-                        final name = TextEditingController(text: _query);
-                        final p = TextEditingController(text: '0');
-                        final c2 = TextEditingController(text: '0');
-                        final f = TextEditingController(text: '0');
-                        final fi = TextEditingController(text: '0');
-                        int kcalFrom() => (_parseNumLoose(p.text) * 4 + _parseNumLoose(c2.text) * 4 + _parseNumLoose(f.text) * 9).round();
-                        final insets = MediaQuery.of(cxt).viewInsets;
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: insets.bottom),
-                          child: SafeArea(
-                            top: false,
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                                Text('New Ingredient', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 16),
-                                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
-                                const SizedBox(height: 12),
-                                const Align(alignment: Alignment.centerLeft, child: Text('Per 100g:', style: TextStyle(fontSize: 12, color: Colors.black54))),
-                                const SizedBox(height: 8),
-                                StatefulBuilder(builder: (_, setSt) => Column(children: [
-                                  Row(children: [
-                                    Expanded(child: TextFormField(controller: p, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))], decoration: const InputDecoration(labelText: 'Protein (g)'), onChanged: (_) => setSt(() {}))),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: TextFormField(controller: c2, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))], decoration: const InputDecoration(labelText: 'Carbs (g)'), onChanged: (_) => setSt(() {}))),
-                                  ]),
-                                  const SizedBox(height: 12),
-                                  Row(children: [
-                                    Expanded(child: TextFormField(controller: f, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))], decoration: const InputDecoration(labelText: 'Fat (g)'), onChanged: (_) => setSt(() {}))),
-                                    const SizedBox(width: 12),
-                                    Expanded(child: TextFormField(controller: fi, keyboardType: const TextInputType.numberWithOptions(decimal: true), inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))], decoration: const InputDecoration(labelText: 'Fiber (g)'))),
-                                  ]),
-                                  const SizedBox(height: 16),
-                                  Align(alignment: Alignment.centerLeft, child: Text('Calories (auto): ${kcalFrom()} kcal', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
-                                ])),
-                                const SizedBox(height: 20),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      state.addIngredient(Ingredient(id: '', name: name.text.trim(), protein100: _parseNumLoose(p.text), carbs100: _parseNumLoose(c2.text), fat100: _parseNumLoose(f.text), fiber100: _parseNumLoose(fi.text), kcal100: kcalFrom(), source: 'manual'));
-                                      Navigator.pop(cxt);
-                                    },
-                                    child: const Text('Save Ingredient'),
-                                  ),
-                                ),
-                              ]),
-                            ),
-                          ),
-                        );
-                      },
-                    );
+                    widget.onManualEntry?.call(q);
                   },
                 ),
                 if (_offResults == null && !_searching) ...[

@@ -25,7 +25,7 @@ class MacroProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final safeGoal = goal <= 0 ? 1.0 : goal;
     final pct = (value / safeGoal).clamp(0.0, 1.0);
-    final barHeight = compact ? 6.0 : 14.0;
+    final barHeight = compact ? 6.0 : 8.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textStyle = Theme.of(
       context,

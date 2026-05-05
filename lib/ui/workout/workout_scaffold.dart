@@ -240,7 +240,7 @@ class _DayTypeBanner extends StatelessWidget {
   final DayType dayType;
 
   Color get _color => switch (dayType) {
-    DayType.rest => const Color(0xFF48CAE4),
+    DayType.rest => AppColors.secondary,
     DayType.training => AppColors.primary,
     DayType.intense => AppColors.danger,
   };

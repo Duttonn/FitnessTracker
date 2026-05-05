@@ -5,30 +5,30 @@ import 'package:google_fonts/google_fonts.dart';
 // Colour tokens
 // ---------------------------------------------------------------------------
 class AppColors {
-  // Brand
-  static const primary = Color(0xFF6C63FF);
-  static const primaryLight = Color(0xFFEDECFF);
-  static const secondary = Color(0xFF48CAE4);
+  // Brand — deep slate-blue, desaturated (~60% sat), clearly not AI purple
+  static const primary = Color(0xFF2B6CB0);
+  static const primaryLight = Color(0xFFEBF8FF);
+  static const secondary = Color(0xFF4DB8C0); // rest-day teal, semantic only
 
-  // Macros
-  static const protein = Color(0xFFFF9A3C);
-  static const fat = Color(0xFFB57BEA);
-  static const carbs = Color(0xFFFF6B6B);
-  static const fiber = Color(0xFF2EC4B6);
+  // Macros — slightly desaturated for a more refined look
+  static const protein = Color(0xFFED8936); // warm amber-orange
+  static const fat = Color(0xFF9F7AEA);     // muted lavender
+  static const carbs = Color(0xFFE05252);   // clean rose-red
+  static const fiber = Color(0xFF38B2AC);   // teal
 
   // State
-  static const success = Color(0xFF2EC4B6);
-  static const warning = Color(0xFFFFB347);
-  static const danger = Color(0xFFFF4D4D);
+  static const success = Color(0xFF38A169); // green
+  static const warning = Color(0xFFD69E2E); // amber
+  static const danger = Color(0xFFE53E3E);  // red
 
   // Surfaces — light
-  static const bg = Color(0xFFF3F4F8);
+  static const bg = Color(0xFFF5F7FA);  // neutral cool-white
   static const card = Colors.white;
 
   // Surfaces — dark
-  static const bgDark = Color(0xFF0F0F16);
-  static const cardDark = Color(0xFF1C1C2B);
-  static const surfaceDark = Color(0xFF252535);
+  static const bgDark = Color(0xFF0F0F1A);   // deep near-black
+  static const cardDark = Color(0xFF1A1A2E); // refined navy-charcoal
+  static const surfaceDark = Color(0xFF242440);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ class AppTheme {
       brightness: brightness,
       colorScheme: colorScheme,
     );
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
+    final textTheme = GoogleFonts.outfitTextTheme(base.textTheme).apply(
       bodyColor: isDark ? Colors.white.withValues(alpha: .9) : Colors.black87,
       displayColor:
           isDark ? Colors.white.withValues(alpha: .9) : Colors.black87,
@@ -234,9 +234,9 @@ BoxDecoration appCardDecoration({bool isDark = false}) => BoxDecoration(
       ? []
       : [
           BoxShadow(
-            color: Colors.black.withValues(alpha: .06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.primary.withValues(alpha: .06),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
         ],
 );

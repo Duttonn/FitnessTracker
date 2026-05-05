@@ -287,12 +287,12 @@ class _WorkoutGateButton extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C2B),
+          color: AppColors.cardDark,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: .35),
-              blurRadius: 16,
+              color: AppColors.primary.withValues(alpha: .30),
+              blurRadius: 20,
               offset: const Offset(0, 6),
             ),
           ],
