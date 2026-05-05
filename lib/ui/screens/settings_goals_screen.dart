@@ -397,21 +397,28 @@ class _SectionCard extends StatelessWidget {
       );
 }
 
-// ── Macro Profiles Panel ──────────────────────────────────────────────────────
+// ── Macro Presets Panel ───────────────────────────────────────────────────────
 
 class _MacroProfilesPanel extends StatelessWidget {
   const _MacroProfilesPanel();
 
-  static Color _colorFor(DayType t) => switch (t) {
-    DayType.rest => const Color(0xFF48CAE4),
-    DayType.training => AppColors.primary,
-    DayType.intense => AppColors.danger,
-  };
+  static Color _colorForIndex(int i) {
+    const palette = [
+      Color(0xFF48CAE4),
+      AppColors.primary,
+      AppColors.danger,
+      Color(0xFF38B2AC),
+      Color(0xFF9F7AEA),
+      Color(0xFFED8936),
+    ];
+    return palette[i % palette.length];
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final theme = Theme.of(context);
+    final presets = appState.macroPresets;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,69 +427,109 @@ class _MacroProfilesPanel extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                'Macro Profiles',
+                'Day Presets',
                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-            Tooltip(
-              message: 'Set different macro targets for each day type. '
-                  'Selected at the start of each day.',
-              child: Icon(Icons.info_outline_rounded, size: 18, color: Colors.black38),
+            TextButton.icon(
+              onPressed: () => _createPreset(context, appState),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
-          'Tap a profile to edit its targets.',
+          'Tap to edit macros, name or emoji. Long-press to set as today.',
           style: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),
         ),
         const SizedBox(height: 14),
-        for (final type in DayType.values) ...[
-          _ProfileRow(
-            type: type,
-            profile: appState.macroProfiles[type]!,
-            isToday: appState.todayDayType == type,
-            color: _colorFor(type),
-            onTap: () => _editProfile(context, appState, type),
+        for (int i = 0; i < presets.length; i++) ...[
+          _PresetRow(
+            preset: presets[i],
+            isToday: appState.todayPresetId == presets[i].id,
+            color: _colorForIndex(i),
+            onTap: () => _editPreset(context, appState, presets[i]),
+            onSetToday: () => appState.setPreset(presets[i].id),
+            onDelete: presets.length > 1 ? () => _confirmDelete(context, appState, presets[i]) : null,
           ),
-          if (type != DayType.intense) const SizedBox(height: 10),
+          if (i < presets.length - 1) const SizedBox(height: 10),
         ],
       ],
     );
   }
 
-  void _editProfile(BuildContext context, AppState appState, DayType type) {
+  void _editPreset(BuildContext context, AppState appState, MacroPreset preset) {
     showDialog<void>(
       context: context,
-      builder: (_) => _MacroProfileDialog(
-        type: type,
-        profile: appState.macroProfiles[type]!,
-        onSave: (updated) => appState.updateMacroProfile(type, updated),
+      builder: (_) => _PresetDialog(
+        preset: preset,
+        onSave: (updated) => appState.updatePreset(updated),
       ),
     );
   }
+
+  void _createPreset(BuildContext context, AppState appState) {
+    final newPreset = MacroPreset(
+      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+      name: 'New Preset',
+      emoji: '📋',
+      protein: 150,
+      carbs: 200,
+      fat: 60,
+      fiber: 25,
+      kcal: 1980,
+    );
+    showDialog<void>(
+      context: context,
+      builder: (_) => _PresetDialog(
+        preset: newPreset,
+        isNew: true,
+        onSave: (p) => appState.addPreset(p),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, AppState appState, MacroPreset preset) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete preset?'),
+        content: Text('Delete "${preset.emoji} ${preset.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) appState.deletePreset(preset.id);
+  }
 }
 
-class _ProfileRow extends StatelessWidget {
-  const _ProfileRow({
-    required this.type,
-    required this.profile,
+class _PresetRow extends StatelessWidget {
+  const _PresetRow({
+    required this.preset,
     required this.isToday,
     required this.color,
     required this.onTap,
+    required this.onSetToday,
+    this.onDelete,
   });
 
-  final DayType type;
-  final MacroProfile profile;
+  final MacroPreset preset;
   final bool isToday;
   final Color color;
   final VoidCallback onTap;
+  final VoidCallback onSetToday;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onSetToday,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
@@ -492,7 +539,7 @@ class _ProfileRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Text(type.emoji, style: const TextStyle(fontSize: 20)),
+            Text(preset.emoji, style: const TextStyle(fontSize: 20)),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -501,12 +548,8 @@ class _ProfileRow extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        type.label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                          fontSize: 14,
-                        ),
+                        preset.name,
+                        style: TextStyle(fontWeight: FontWeight.w700, color: color, fontSize: 14),
                       ),
                       if (isToday) ...[
                         const SizedBox(width: 6),
@@ -516,22 +559,27 @@ class _ProfileRow extends StatelessWidget {
                             color: color.withValues(alpha: .15),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Text(
-                            'TODAY',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
-                          ),
+                          child: Text('TODAY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
                         ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${profile.kcal} kcal  ·  ${profile.protein.toInt()}p  ${profile.carbs.toInt()}c  ${profile.fat.toInt()}f  ${profile.fiber.toInt()}fib',
+                    '${preset.kcal} kcal  ·  ${preset.protein.toInt()}p  ${preset.carbs.toInt()}c  ${preset.fat.toInt()}f  ${preset.fiber.toInt()}fib',
                     style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54),
                   ),
                 ],
               ),
             ),
+            if (onDelete != null)
+              IconButton(
+                icon: Icon(Icons.delete_outline_rounded, size: 18, color: Colors.black26),
+                onPressed: onDelete,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
             Icon(Icons.edit_rounded, size: 16, color: color.withValues(alpha: .6)),
           ],
         ),
@@ -540,22 +588,19 @@ class _ProfileRow extends StatelessWidget {
   }
 }
 
-class _MacroProfileDialog extends StatefulWidget {
-  const _MacroProfileDialog({
-    required this.type,
-    required this.profile,
-    required this.onSave,
-  });
-
-  final DayType type;
-  final MacroProfile profile;
-  final ValueChanged<MacroProfile> onSave;
+class _PresetDialog extends StatefulWidget {
+  const _PresetDialog({required this.preset, required this.onSave, this.isNew = false});
+  final MacroPreset preset;
+  final ValueChanged<MacroPreset> onSave;
+  final bool isNew;
 
   @override
-  State<_MacroProfileDialog> createState() => _MacroProfileDialogState();
+  State<_PresetDialog> createState() => _PresetDialogState();
 }
 
-class _MacroProfileDialogState extends State<_MacroProfileDialog> {
+class _PresetDialogState extends State<_PresetDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _emoji;
   late final TextEditingController _protein;
   late final TextEditingController _carbs;
   late final TextEditingController _fat;
@@ -564,7 +609,9 @@ class _MacroProfileDialogState extends State<_MacroProfileDialog> {
   @override
   void initState() {
     super.initState();
-    final p = widget.profile;
+    final p = widget.preset;
+    _name = TextEditingController(text: p.name);
+    _emoji = TextEditingController(text: p.emoji);
     _protein = TextEditingController(text: p.protein.toInt().toString());
     _carbs = TextEditingController(text: p.carbs.toInt().toString());
     _fat = TextEditingController(text: p.fat.toInt().toString());
@@ -573,10 +620,8 @@ class _MacroProfileDialogState extends State<_MacroProfileDialog> {
 
   @override
   void dispose() {
-    _protein.dispose();
-    _carbs.dispose();
-    _fat.dispose();
-    _fiber.dispose();
+    _name.dispose(); _emoji.dispose();
+    _protein.dispose(); _carbs.dispose(); _fat.dispose(); _fiber.dispose();
     super.dispose();
   }
 
@@ -593,17 +638,16 @@ class _MacroProfileDialogState extends State<_MacroProfileDialog> {
     final f = double.tryParse(_fat.text);
     final fib = double.tryParse(_fiber.text);
     if (p == null || c == null || f == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter valid numbers')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter valid numbers')));
       return;
     }
-    widget.onSave(MacroProfile(
-      dayType: widget.type,
+    widget.onSave(widget.preset.copyWith(
+      name: _name.text.trim().isEmpty ? widget.preset.name : _name.text.trim(),
+      emoji: _emoji.text.trim().isEmpty ? widget.preset.emoji : _emoji.text.trim(),
       protein: p,
       carbs: c,
       fat: f,
-      fiber: fib ?? widget.profile.fiber,
+      fiber: fib ?? widget.preset.fiber,
       kcal: _kcal,
     ));
     Navigator.pop(context);
@@ -612,11 +656,36 @@ class _MacroProfileDialogState extends State<_MacroProfileDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Edit ${widget.type.label} Profile'),
+      title: Text(widget.isNew ? 'New Preset' : 'Edit Preset'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 64,
+                  child: TextField(
+                    controller: _emoji,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 22),
+                    decoration: const InputDecoration(labelText: 'Icon'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Align(alignment: Alignment.centerLeft, child: Text('Per day targets:', style: TextStyle(fontSize: 12, color: Colors.black54))),
+            const SizedBox(height: 10),
             _MacroField(label: 'Protein (g)', controller: _protein, onChanged: () => setState(() {})),
             const SizedBox(height: 10),
             _MacroField(label: 'Carbs (g)', controller: _carbs, onChanged: () => setState(() {})),
@@ -635,14 +704,7 @@ class _MacroProfileDialogState extends State<_MacroProfileDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Estimated kcal', style: TextStyle(fontWeight: FontWeight.w600)),
-                  Text(
-                    '$_kcal kcal',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                      fontSize: 16,
-                    ),
-                  ),
+                  Text('$_kcal kcal', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary, fontSize: 16)),
                 ],
               ),
             ),

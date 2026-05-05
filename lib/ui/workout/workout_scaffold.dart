@@ -247,41 +247,42 @@ class _DayTypeBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: _color.withValues(alpha: .12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _color.withValues(alpha: .3)),
-      ),
-      child: Row(
-        children: [
-          Text(dayType.emoji, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Consumer<AppState>(
+      builder: (_, s, __) {
+        final preset = s.todayPreset;
+        if (preset == null) return const SizedBox.shrink();
+        // Color from preset index position
+        const palette = [AppColors.secondary, AppColors.primary, AppColors.danger, Color(0xFF38B2AC), Color(0xFF9F7AEA), Color(0xFFED8936)];
+        final idx = s.macroPresets.indexWhere((p) => p.id == preset.id);
+        final color = idx >= 0 ? palette[idx % palette.length] : _color;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: .3)),
+          ),
+          child: Row(
             children: [
-              Text(
-                dayType.label,
-                style: TextStyle(
-                  color: _color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
-              ),
-              Consumer<AppState>(
-                builder: (_, s, __) {
-                  final profile = s.macroProfiles[dayType]!;
-                  return Text(
-                    '${profile.kcal} kcal  ·  ${profile.protein.toInt()}p  ${profile.carbs.toInt()}c  ${profile.fat.toInt()}f',
+              Text(preset.emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    preset.name,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  Text(
+                    '${preset.kcal} kcal  ·  ${preset.protein.toInt()}p  ${preset.carbs.toInt()}c  ${preset.fat.toInt()}f',
                     style: const TextStyle(color: Colors.white38, fontSize: 12),
-                  );
-                },
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

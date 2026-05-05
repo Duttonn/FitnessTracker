@@ -11,6 +11,7 @@ import 'package:flutter_fitness_app/ui/screens/foods_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/quick_add_sheet.dart';
 import 'package:flutter_fitness_app/ui/widgets/macro_mode_toggle.dart';
 import 'package:flutter_fitness_app/ui/widgets/calorie_ring.dart';
+import 'package:flutter_fitness_app/ui/daily_checkin_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.openFoodsTab});
@@ -218,6 +219,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: isDark ? Colors.white54 : Colors.black45,
                             ),
+                      ),
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: () => showDailyCheckin(context, dismissible: true),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              state.todayPreset != null
+                                  ? '${state.todayPreset!.emoji} ${state.todayPreset!.name}'
+                                  : 'Set day type',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(width: 3),
+                            const Icon(Icons.swap_horiz_rounded, size: 13, color: AppColors.primary),
+                          ],
+                        ),
                       ),
                     ],
                   ),

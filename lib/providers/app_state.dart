@@ -14,31 +14,23 @@ import 'package:uuid/uuid.dart';
 
 enum FoodsTab { ingredients, meals } // added
 
+// Legacy enum kept only for migration from old save data.
 enum DayType { rest, training, intense }
 
-extension DayTypeX on DayType {
-  String get label => switch (this) {
-    DayType.rest => 'Rest Day',
-    DayType.training => 'Training',
-    DayType.intense => 'Intense',
-  };
-  String get emoji => switch (this) {
-    DayType.rest => '😴',
-    DayType.training => '💪',
-    DayType.intense => '🔥',
-  };
-}
-
-class MacroProfile {
-  final DayType dayType;
+class MacroPreset {
+  final String id;
+  String name;
+  String emoji;
   double protein;
   double carbs;
   double fat;
   double fiber;
   int kcal;
 
-  MacroProfile({
-    required this.dayType,
+  MacroPreset({
+    required this.id,
+    required this.name,
+    required this.emoji,
     required this.protein,
     required this.carbs,
     required this.fat,
@@ -56,8 +48,21 @@ class MacroProfile {
     weightGoal: weightGoal,
   );
 
+  MacroPreset copyWith({String? name, String? emoji, double? protein, double? carbs, double? fat, double? fiber, int? kcal}) => MacroPreset(
+    id: id,
+    name: name ?? this.name,
+    emoji: emoji ?? this.emoji,
+    protein: protein ?? this.protein,
+    carbs: carbs ?? this.carbs,
+    fat: fat ?? this.fat,
+    fiber: fiber ?? this.fiber,
+    kcal: kcal ?? this.kcal,
+  );
+
   Map<String, dynamic> toJson() => {
-    'dayType': dayType.name,
+    'id': id,
+    'name': name,
+    'emoji': emoji,
     'protein': protein,
     'carbs': carbs,
     'fat': fat,
@@ -65,18 +70,26 @@ class MacroProfile {
     'kcal': kcal,
   };
 
-  factory MacroProfile.fromJson(Map<String, dynamic> m) => MacroProfile(
-    dayType: DayType.values.firstWhere(
-      (e) => e.name == m['dayType'],
-      orElse: () => DayType.rest,
-    ),
+  factory MacroPreset.fromJson(Map<String, dynamic> m) => MacroPreset(
+    id: m['id'] as String,
+    name: m['name'] as String? ?? 'Preset',
+    emoji: m['emoji'] as String? ?? '📋',
     protein: (m['protein'] ?? 150).toDouble(),
     carbs: (m['carbs'] ?? 150).toDouble(),
     fat: (m['fat'] ?? 55).toDouble(),
     fiber: (m['fiber'] ?? 25).toDouble(),
     kcal: (m['kcal'] ?? 1695).toInt(),
   );
+
+  static List<MacroPreset> defaults() => [
+    MacroPreset(id: 'rest', name: 'Rest Day', emoji: '😴', protein: 150, carbs: 150, fat: 55, fiber: 25, kcal: 1695),
+    MacroPreset(id: 'training', name: 'Training', emoji: '💪', protein: 180, carbs: 250, fat: 65, fiber: 30, kcal: 2305),
+    MacroPreset(id: 'intense', name: 'Intense', emoji: '🔥', protein: 200, carbs: 350, fat: 80, fiber: 30, kcal: 2920),
+  ];
 }
+
+// Legacy alias so existing callers still compile during migration.
+typedef MacroProfile = MacroPreset;
 
 class Goals {
   double protein;
@@ -376,38 +389,65 @@ class AppState extends ChangeNotifier {
   }
 
   // ── Day type & daily check-in ─────────────────────────────────────────────
-  DayType? todayDayType;
   String? _lastCheckInKey;
+  String? todayPresetId;
 
   bool get needsCheckIn => _lastCheckInKey != dayKeyFrom(DateTime.now());
 
-  Map<DayType, MacroProfile> macroProfiles = {
-    DayType.rest: MacroProfile(dayType: DayType.rest, protein: 150, carbs: 150, fat: 55, fiber: 25, kcal: 1695),
-    DayType.training: MacroProfile(dayType: DayType.training, protein: 180, carbs: 250, fat: 65, fiber: 30, kcal: 2305),
-    DayType.intense: MacroProfile(dayType: DayType.intense, protein: 200, carbs: 350, fat: 80, fiber: 30, kcal: 2920),
-  };
+  List<MacroPreset> macroPresets = MacroPreset.defaults();
 
-  void setDayType(DayType type) {
-    todayDayType = type;
-    _lastCheckInKey = dayKeyFrom(DateTime.now());
-    final profile = macroProfiles[type]!;
-    setGoals(profile.toGoals(
-      weightGoal: goals.weightGoal,
-      waterGoalMl: goals.waterGoalMl,
-    ));
+  MacroPreset? get todayPreset =>
+      todayPresetId == null ? null : macroPresets.where((p) => p.id == todayPresetId).firstOrNull;
+
+  // Legacy shim: used by workout_scaffold
+  DayType? get todayDayType {
+    final id = todayPresetId;
+    if (id == null) return null;
+    return switch (id) { 'rest' => DayType.rest, 'training' => DayType.training, 'intense' => DayType.intense, _ => null };
   }
 
-  void updateMacroProfile(DayType type, MacroProfile profile) {
-    macroProfiles[type] = profile;
-    if (todayDayType == type) {
-      setGoals(profile.toGoals(
-        weightGoal: goals.weightGoal,
-        waterGoalMl: goals.waterGoalMl,
-      ));
+  // Legacy shim: macroProfiles[type] still used in one spot in workout_scaffold
+  Map<DayType, MacroPreset> get macroProfiles => {
+    for (final dt in DayType.values)
+      dt: macroPresets.firstWhere((p) => p.id == dt.name, orElse: () => MacroPreset.defaults().firstWhere((p) => p.id == dt.name)),
+  };
+
+  void setPreset(String id) {
+    todayPresetId = id;
+    _lastCheckInKey = dayKeyFrom(DateTime.now());
+    final preset = macroPresets.firstWhere((p) => p.id == id, orElse: () => macroPresets.first);
+    setGoals(preset.toGoals(weightGoal: goals.weightGoal, waterGoalMl: goals.waterGoalMl));
+  }
+
+  // Legacy shim kept so daily_checkin_sheet callers still compile
+  void setDayType(DayType type) => setPreset(type.name);
+
+  void addPreset(MacroPreset preset) {
+    macroPresets.add(preset);
+    _save();
+    notifyListeners();
+  }
+
+  void updatePreset(MacroPreset updated) {
+    final idx = macroPresets.indexWhere((p) => p.id == updated.id);
+    if (idx == -1) return;
+    macroPresets[idx] = updated;
+    if (todayPresetId == updated.id) {
+      setGoals(updated.toGoals(weightGoal: goals.weightGoal, waterGoalMl: goals.waterGoalMl));
     }
     _save();
     notifyListeners();
   }
+
+  void deletePreset(String id) {
+    if (macroPresets.length <= 1) return;
+    macroPresets.removeWhere((p) => p.id == id);
+    if (todayPresetId == id) todayPresetId = null;
+    _save();
+    notifyListeners();
+  }
+
+  void updateMacroProfile(DayType type, MacroPreset profile) => updatePreset(profile);
 
   // ── Custom exercises (user-created) ──────────────────────────────────────
   final List<Exercise> customExercises = [];
@@ -687,9 +727,9 @@ class AppState extends ChangeNotifier {
     'activeWeekdays': activeWeekdays,
     'waterByDay': waterByDay,
     // Workout
-    'macroProfiles': macroProfiles.map((k, v) => MapEntry(k.name, v.toJson())),
+    'macroPresets': macroPresets.map((p) => p.toJson()).toList(),
     'lastCheckInKey': _lastCheckInKey,
-    'todayDayType': todayDayType?.name,
+    'todayPresetId': todayPresetId,
     'allSetLogs': allSetLogs.map(
       (k, v) => MapEntry(k, v.map((s) => s.toJson()).toList()),
     ),
@@ -771,26 +811,35 @@ class AppState extends ChangeNotifier {
         if (k is String && v is int) waterByDay[k] = v;
       });
     }
-    // Macro profiles
-    final mp = m['macroProfiles'];
-    if (mp is Map) {
-      mp.forEach((k, v) {
-        try {
-          final profile = MacroProfile.fromJson(Map<String, dynamic>.from(v as Map));
-          macroProfiles[profile.dayType] = profile;
-        } catch (_) {}
-      });
+    // Macro presets — migrate from old macroProfiles if needed
+    final rawPresets = m['macroPresets'];
+    if (rawPresets is List && rawPresets.isNotEmpty) {
+      macroPresets = rawPresets.map((e) => MacroPreset.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+    } else {
+      // Migrate from old Map<DayType, MacroProfile> format
+      macroPresets = MacroPreset.defaults();
+      final mp = m['macroProfiles'];
+      if (mp is Map) {
+        mp.forEach((k, v) {
+          try {
+            final old = Map<String, dynamic>.from(v as Map);
+            final idx = macroPresets.indexWhere((p) => p.id == k);
+            if (idx != -1) {
+              macroPresets[idx] = macroPresets[idx].copyWith(
+                protein: (old['protein'] as num?)?.toDouble(),
+                carbs: (old['carbs'] as num?)?.toDouble(),
+                fat: (old['fat'] as num?)?.toDouble(),
+                fiber: (old['fiber'] as num?)?.toDouble(),
+                kcal: (old['kcal'] as num?)?.toInt(),
+              );
+            }
+          } catch (_) {}
+        });
+      }
     }
     _lastCheckInKey = m['lastCheckInKey'] as String?;
-    final dts = m['todayDayType'] as String?;
-    if (dts != null) {
-      todayDayType = DayType.values.firstWhere(
-        (e) => e.name == dts,
-        orElse: () => DayType.training,
-      );
-    } else {
-      todayDayType = null;
-    }
+    // Migrate todayDayType → todayPresetId
+    todayPresetId = m['todayPresetId'] as String? ?? m['todayDayType'] as String?;
     // Set logs
     allSetLogs.clear();
     final sl = m['allSetLogs'];
@@ -1376,7 +1425,7 @@ class AppState extends ChangeNotifier {
     _lastDayKey = null;
     // Workout state
     _workoutMode = false;
-    todayDayType = null;
+    todayPresetId = null;
     _lastCheckInKey = null;
     allSetLogs.clear();
     _save();
