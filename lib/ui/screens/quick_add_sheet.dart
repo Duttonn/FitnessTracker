@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
+import 'package:flutter_fitness_app/models/ingredient.dart';
 import 'package:flutter_fitness_app/ui/widgets/segmented_meal_selector.dart';
 import 'package:flutter_fitness_app/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -43,6 +44,11 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
   final _fiber = TextEditingController();
   final _title = TextEditingController();
 
+  // Ingredient-linked editing
+  Ingredient? _linkedIngredient;
+  late final TextEditingController _grams;
+  Portion? _selectedPortion;
+
   @override
   void initState() {
     super.initState();
@@ -55,11 +61,24 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
       _fat.text = e.fat.toStringAsFixed(0);
       _fiber.text = e.fiber.toStringAsFixed(0);
       _title.text = e.title ?? '';
-      // Restore the day from the existing entry's dayKey
-      try {
-        _targetDate = DateTime.parse(e.dayKey);
-      } catch (_) {}
+      try { _targetDate = DateTime.parse(e.dayKey); } catch (_) {}
+
+      if (e.ingredientId != null) {
+        _linkedIngredient = widget.appState.ingredients[e.ingredientId];
+        if (_linkedIngredient != null && e.portionLabel != null) {
+          _selectedPortion = _linkedIngredient!.portions
+              .where((p) => p.label == e.portionLabel)
+              .firstOrNull;
+        }
+      }
     }
+
+    // Initialise grams field — for portion mode, store the portion count, else actual grams
+    double initialGrams = widget.existing?.grams ?? 100.0;
+    if (_selectedPortion != null && initialGrams > 0) {
+      initialGrams = (initialGrams / _selectedPortion!.grams);
+    }
+    _grams = TextEditingController(text: initialGrams.toStringAsFixed(0));
   }
 
   @override
@@ -69,6 +88,7 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
     _fat.dispose();
     _fiber.dispose();
     _title.dispose();
+    _grams.dispose();
     super.dispose();
   }
 
@@ -76,6 +96,23 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
 
   int get estimatedCalories {
     return (_parse(_protein) * 4 + _parse(_carbs) * 4 + _parse(_fat) * 9).round();
+  }
+
+  double get _actualGrams {
+    final raw = double.tryParse(_grams.text) ?? 0;
+    return _selectedPortion != null ? raw * _selectedPortion!.grams : raw;
+  }
+
+  void _recalcMacrosFromGrams() {
+    final ing = _linkedIngredient;
+    if (ing == null) return;
+    final factor = _actualGrams / 100.0;
+    setState(() {
+      _protein.text = (ing.protein100 * factor).toStringAsFixed(0);
+      _carbs.text = (ing.carbs100 * factor).toStringAsFixed(0);
+      _fat.text = (ing.fat100 * factor).toStringAsFixed(0);
+      _fiber.text = (ing.fiber100 * factor).toStringAsFixed(0);
+    });
   }
 
   String _dayKey(DateTime dt) => AppState.dayKeyFrom(dt);
@@ -145,7 +182,12 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
       );
     } else {
       final existing = widget.existing!;
-      final updated = existing.copyWith(
+      final newGrams = _linkedIngredient != null ? _actualGrams : existing.grams;
+      final newPortionLabel = _linkedIngredient != null ? _selectedPortion?.label : existing.portionLabel;
+      final updated = MacroEntry(
+        id: existing.id,
+        dayKey: dayKey,
+        createdAt: existing.createdAt,
         meal: meal,
         protein: p,
         carbs: c,
@@ -153,6 +195,9 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
         fiber: fi,
         kcal: kcal,
         title: _title.text.trim().isEmpty ? existing.title : _title.text.trim(),
+        ingredientId: existing.ingredientId,
+        grams: newGrams,
+        portionLabel: newPortionLabel,
       );
       state.updateEntry(updated);
       HapticFeedback.lightImpact();
@@ -169,6 +214,7 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor = isDark ? AppColors.cardDark : Colors.white;
     final isEditing = widget.existing != null;
+    final ing = _linkedIngredient;
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -189,7 +235,6 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Drag handle
                     Center(
                       child: Container(
                         width: 36, height: 4,
@@ -217,7 +262,6 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
                       ],
                     ),
 
-                    // Date selector (only for new entries)
                     if (!isEditing) ...[
                       const SizedBox(height: 8),
                       _DateSelector(
@@ -250,6 +294,71 @@ class _QuickAddSheetState extends State<QuickAddSheet> {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Weight/portion row — shown when linked to an ingredient
+                    if (ing != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Linked: ${ing.name}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary.withValues(alpha: .8),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _grams,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                                    decoration: InputDecoration(
+                                      labelText: _selectedPortion != null ? '× servings' : 'Grams',
+                                    ),
+                                    onChanged: (_) => _recalcMacrosFromGrams(),
+                                  ),
+                                ),
+                                if (ing.portions.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: DropdownButtonFormField<Portion?>(
+                                      value: _selectedPortion,
+                                      decoration: const InputDecoration(labelText: 'Unit'),
+                                      items: [
+                                        const DropdownMenuItem<Portion?>(value: null, child: Text('g')),
+                                        for (final pt in ing.portions)
+                                          DropdownMenuItem<Portion?>(
+                                            value: pt,
+                                            child: Text(pt.label),
+                                          ),
+                                      ],
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _selectedPortion = v;
+                                          if (v != null) _grams.text = '1';
+                                        });
+                                        _recalcMacrosFromGrams();
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
 
                     Row(
                       children: [

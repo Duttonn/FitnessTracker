@@ -203,9 +203,11 @@ class FoodsScreenState extends State<FoodsScreen> {
 
   void _showIngredientQuickAdd(BuildContext context, Ingredient ingredient) {
     final state = context.read<AppState>();
+    final hasPortion = ingredient.portions.isNotEmpty;
     final gramsCtl = TextEditingController(text: '100');
     Meal mealType = Meal.lunch;
     DateTime targetDate = DateTime.now();
+    Portion? selectedPortion;
 
     String dayLabel(DateTime dt) {
       final today = AppState.dayKeyFrom(DateTime.now());
@@ -219,92 +221,118 @@ class FoodsScreenState extends State<FoodsScreen> {
     showDialog(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, setSt) => AlertDialog(
-          title: Text('Add ${ingredient.name}'),
-          content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: gramsCtl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [DecimalTextInputFormatter()],
-                  decoration: const InputDecoration(labelText: 'Grams'),
-                  onChanged: (_) => setSt(() {}),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<Meal>(
-                  value: mealType,
-                  decoration: const InputDecoration(labelText: 'Meal'),
-                  items: Meal.values.map((m) => DropdownMenuItem(
-                    value: m,
-                    child: Text(m.name[0].toUpperCase() + m.name.substring(1)),
-                  )).toList(),
-                  onChanged: (v) => setSt(() => mealType = v ?? mealType),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  const Icon(Icons.calendar_today_rounded, size: 16),
-                  const SizedBox(width: 8),
-                  Text(dayLabel(targetDate), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: c,
-                        initialDate: targetDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) setSt(() => targetDate = picked);
-                    },
-                    child: const Text('Change'),
+        builder: (c, setSt) {
+          final rawAmount = _parseNumLoose(gramsCtl.text);
+          final actualGrams = selectedPortion != null ? rawAmount * selectedPortion!.grams : rawAmount;
+          final factor = actualGrams / 100.0;
+          return AlertDialog(
+            title: Text('Add ${ingredient.name}'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: gramsCtl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [DecimalTextInputFormatter()],
+                          decoration: InputDecoration(labelText: selectedPortion != null ? '× servings' : 'Grams'),
+                          onChanged: (_) => setSt(() {}),
+                        ),
+                      ),
+                      if (hasPortion) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<Portion?>(
+                            value: selectedPortion,
+                            decoration: const InputDecoration(labelText: 'Unit'),
+                            items: [
+                              const DropdownMenuItem<Portion?>(value: null, child: Text('g')),
+                              for (final pt in ingredient.portions)
+                                DropdownMenuItem<Portion?>(
+                                  value: pt,
+                                  child: Text(pt.label),
+                                ),
+                            ],
+                            onChanged: (v) => setSt(() {
+                              selectedPortion = v;
+                              if (v != null && gramsCtl.text == '100') gramsCtl.text = '1';
+                            }),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ]),
-                const SizedBox(height: 8),
-                Builder(builder: (_) {
-                  final g = _parseNumLoose(gramsCtl.text);
-                  final factor = g / 100.0;
-                  final p = ingredient.protein100 * factor;
-                  final ca = ingredient.carbs100 * factor;
-                  final fa = ingredient.fat100 * factor;
-                  return Text(
-                    '${g.toStringAsFixed(0)}g → ${(ingredient.kcal100 * factor).round()} kcal  P ${p.toStringAsFixed(0)} C ${ca.toStringAsFixed(0)} F ${fa.toStringAsFixed(0)}',
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Meal>(
+                    value: mealType,
+                    decoration: const InputDecoration(labelText: 'Meal'),
+                    items: Meal.values.map((m) => DropdownMenuItem(
+                      value: m,
+                      child: Text(m.name[0].toUpperCase() + m.name.substring(1)),
+                    )).toList(),
+                    onChanged: (v) => setSt(() => mealType = v ?? mealType),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    const Icon(Icons.calendar_today_rounded, size: 16),
+                    const SizedBox(width: 8),
+                    Text(dayLabel(targetDate), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: c,
+                          initialDate: targetDate,
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (picked != null) setSt(() => targetDate = picked);
+                      },
+                      child: const Text('Change'),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${actualGrams.toStringAsFixed(0)}g → ${(ingredient.kcal100 * factor).round()} kcal  P ${(ingredient.protein100 * factor).toStringAsFixed(0)} C ${(ingredient.carbs100 * factor).toStringAsFixed(0)} F ${(ingredient.fat100 * factor).toStringAsFixed(0)}',
                     style: Theme.of(c).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  final dayKey = AppState.dayKeyFrom(targetDate);
+                  state.addEntry(MacroEntry(
+                    id: state.generateId(),
+                    dayKey: dayKey,
+                    createdAt: DateTime.now(),
+                    meal: mealType,
+                    protein: ingredient.protein100 * factor,
+                    carbs: ingredient.carbs100 * factor,
+                    fat: ingredient.fat100 * factor,
+                    fiber: ingredient.fiber100 * factor,
+                    kcal: (ingredient.kcal100 * factor).round(),
+                    title: ingredient.name,
+                    ingredientId: ingredient.id.isEmpty ? null : ingredient.id,
+                    grams: actualGrams,
+                    portionLabel: selectedPortion?.label,
+                  ));
+                  Navigator.pop(c);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Added ${ingredient.name} to ${dayLabel(targetDate)}')),
                   );
-                }),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () {
-                final g = _parseNumLoose(gramsCtl.text);
-                final factor = g / 100.0;
-                final dayKey = AppState.dayKeyFrom(targetDate);
-                state.addEntry(MacroEntry(
-                  id: state.generateId(),
-                  dayKey: dayKey,
-                  createdAt: DateTime.now(),
-                  meal: mealType,
-                  protein: ingredient.protein100 * factor,
-                  carbs: ingredient.carbs100 * factor,
-                  fat: ingredient.fat100 * factor,
-                  fiber: ingredient.fiber100 * factor,
-                  kcal: (ingredient.kcal100 * factor).round(),
-                  title: ingredient.name,
-                ));
-                Navigator.pop(c);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Added ${ingredient.name} to ${dayLabel(targetDate)}')),
-                );
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -503,29 +531,34 @@ class FoodsScreenState extends State<FoodsScreen> {
   }) async {
     // When editing, go straight to the form. When adding new, show search first.
     if (initial == null) {
+      String? manualQuery;
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
         builder: (ctx) => _AddIngredientSheet(
           state: context.read<AppState>(),
-          onManualEntry: (query) => _showIngredientForm(
-            context,
-            initial: query.isEmpty
-                ? null
-                : Ingredient(
-                    id: '',
-                    name: query,
-                    protein100: 0,
-                    carbs100: 0,
-                    fat100: 0,
-                    fiber100: 0,
-                    kcal100: 0,
-                    source: 'manual',
-                  ),
-          ),
+          onManualEntry: (query) { manualQuery = query; },
         ),
       );
+      // Opens after first sheet is fully dismissed
+      if (manualQuery != null && mounted) {
+        await _showIngredientForm(
+          context,
+          initial: manualQuery!.isEmpty
+              ? null
+              : Ingredient(
+                  id: '',
+                  name: manualQuery!,
+                  protein100: 0,
+                  carbs100: 0,
+                  fat100: 0,
+                  fiber100: 0,
+                  kcal100: 0,
+                  source: 'manual',
+                ),
+        );
+      }
     } else {
       await _showIngredientForm(context, initial: initial);
     }
@@ -1555,8 +1588,8 @@ class _AddIngredientSheetState extends State<_AddIngredientSheet> {
                   subtitle: Text(_query.isNotEmpty ? 'Create "${_query}"' : 'Fill in nutrition info yourself', style: const TextStyle(fontSize: 12)),
                   onTap: () {
                     final q = _query;
+                    widget.onManualEntry?.call(q); // set before pop so parent catches it
                     Navigator.pop(context);
-                    widget.onManualEntry?.call(q);
                   },
                 ),
                 if (_offResults == null && !_searching) ...[

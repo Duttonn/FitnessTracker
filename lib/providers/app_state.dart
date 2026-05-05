@@ -150,6 +150,9 @@ class MacroEntry {
   double protein, carbs, fat, fiber;
   int kcal;
   String? title;
+  String? ingredientId;
+  double? grams;
+  String? portionLabel;
   MacroEntry({
     required this.id,
     required this.dayKey,
@@ -161,6 +164,9 @@ class MacroEntry {
     required this.fiber,
     required this.kcal,
     this.title,
+    this.ingredientId,
+    this.grams,
+    this.portionLabel,
   });
   MacroEntry copyWith({
     String? id,
@@ -173,6 +179,9 @@ class MacroEntry {
     double? fiber,
     int? kcal,
     String? title,
+    String? ingredientId,
+    double? grams,
+    String? portionLabel,
   }) => MacroEntry(
     id: id ?? this.id,
     dayKey: dayKey ?? this.dayKey,
@@ -184,6 +193,9 @@ class MacroEntry {
     fiber: fiber ?? this.fiber,
     kcal: kcal ?? this.kcal,
     title: title ?? this.title,
+    ingredientId: ingredientId ?? this.ingredientId,
+    grams: grams ?? this.grams,
+    portionLabel: portionLabel ?? this.portionLabel,
   );
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -196,6 +208,9 @@ class MacroEntry {
     'fiber': fiber,
     'kcal': kcal,
     'title': title,
+    if (ingredientId != null) 'ingredientId': ingredientId,
+    if (grams != null) 'grams': grams,
+    if (portionLabel != null) 'portionLabel': portionLabel,
   };
   factory MacroEntry.fromJson(Map<String, dynamic> m) => MacroEntry(
     id: m['id'],
@@ -211,6 +226,9 @@ class MacroEntry {
     fiber: (m['fiber'] ?? 0).toDouble(),
     kcal: (m['kcal'] ?? 0).toInt(),
     title: m['title'],
+    ingredientId: m['ingredientId'],
+    grams: (m['grams'] as num?)?.toDouble(),
+    portionLabel: m['portionLabel'],
   );
 }
 
@@ -1251,6 +1269,8 @@ class AppState extends ChangeNotifier {
         fiber: m.fiber,
         kcal: m.kcal,
         title: ingredient.name,
+        ingredientId: ingredient.id.isEmpty ? null : ingredient.id,
+        grams: grams,
       ),
     );
   }
