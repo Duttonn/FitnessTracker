@@ -12,6 +12,8 @@ import 'package:flutter_fitness_app/ui/screens/quick_add_sheet.dart';
 import 'package:flutter_fitness_app/ui/widgets/macro_mode_toggle.dart';
 import 'package:flutter_fitness_app/ui/widgets/calorie_ring.dart';
 import 'package:flutter_fitness_app/ui/daily_checkin_sheet.dart';
+import 'package:flutter_fitness_app/ui/screens/logs_screen.dart';
+import 'package:flutter_fitness_app/ui/screens/settings_goals_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.openFoodsTab});
@@ -216,6 +218,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsGoalsScreen())),
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(999)),
+                    child: const Icon(Icons.settings_rounded, size: 22, color: Colors.black45),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -359,8 +370,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _SectionHead(
               icon: Icons.restaurant_rounded,
               title: _isToday ? "Today's meals" : DateFormat('MMM d').format(_targetDate),
-              actionLabel: entries.isNotEmpty ? 'Log food' : null,
-              onAction: entries.isNotEmpty ? _openQuickAdd : null,
+              actionLabel: entries.isNotEmpty ? 'See all' : null,
+              onAction: entries.isNotEmpty
+                  ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogsScreen()))
+                  : null,
             ),
             const SizedBox(height: 10),
 

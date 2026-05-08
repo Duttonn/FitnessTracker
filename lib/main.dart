@@ -10,6 +10,7 @@ import 'package:flutter_fitness_app/ui/screens/dashboard_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/logs_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/progress_screen.dart';
 import 'package:flutter_fitness_app/ui/screens/foods_screen.dart';
+import 'package:flutter_fitness_app/ui/screens/quick_add_sheet.dart';
 import 'package:flutter_fitness_app/router.dart';
 import 'package:flutter_fitness_app/providers/app_state.dart';
 import 'package:flutter_fitness_app/ui/screens/settings_goals_screen.dart';
@@ -186,19 +187,28 @@ class BottomNavScaffold extends StatefulWidget {
 
 class _BottomNavScaffoldState extends State<BottomNavScaffold>
     with WidgetsBindingObserver {
-  int index = 0;
-  late final PageController _pageController = PageController(
-    initialPage: index,
-  );
+  // Logical nav index: 0=Home, 1=Workout(special), 2=Progress, 3=Foods
+  int _navIndex = 0;
+
+  // Page view only has real content pages: Home(0), Progress(1), Foods(2)
+  // Workout is handled separately (enters WorkoutMode, no page)
+  late final PageController _pageController = PageController(initialPage: 0);
   final GlobalKey<FoodsScreenState> _foodsKey = GlobalKey<FoodsScreenState>();
 
-  late final List<Widget> screens = [
+  late final List<Widget> _pages = [
     DashboardScreen(openFoodsTab: _openFoodsTab),
-    const LogsScreen(),
     const ProgressScreen(),
-    FoodsScreen(key: _foodsKey), // moved Foods to index 3
-    const SettingsGoalsScreen(), // new combined settings + goals at index 4
+    FoodsScreen(key: _foodsKey),
   ];
+
+  // Maps logical nav index → page index (null = no page, action only)
+  int? _pageForNavIndex(int navIdx) => switch (navIdx) {
+    0 => 0, // Home
+    1 => null, // Workout — handled via enterWorkoutMode
+    2 => 1, // Progress
+    3 => 2, // Foods
+    _ => 0,
+  };
 
   @override
   void initState() {
@@ -217,30 +227,43 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final appState = context.read<AppState>();
-      appState.tickDayRollover();
+      context.read<AppState>().tickDayRollover();
     }
   }
 
-  void _goTo(int i) {
-    if (i == index) return;
-    setState(() => index = i);
+  void _onNavTap(int logicalIndex) {
+    if (logicalIndex == 1) {
+      // Workout tab → enter workout mode
+      HapticFeedback.mediumImpact();
+      context.read<AppState>().enterWorkoutMode();
+      return;
+    }
+    final pageIdx = _pageForNavIndex(logicalIndex);
+    if (pageIdx == null) return;
+    if (_navIndex == logicalIndex) return;
+    setState(() => _navIndex = logicalIndex);
     _pageController.animateToPage(
-      i,
+      pageIdx,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
   }
 
+  void _openQuickLog() {
+    final appState = context.read<AppState>();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (c) => QuickAddSheet(
+        initialMeal: timeAwareMeal(),
+        appState: appState,
+      ),
+    );
+  }
+
   void _openFoodsTab(int tabIndex) {
-    if (index != 3) { // foods now at index 3
-      setState(() => index = 3);
-      _pageController.animateToPage(
-        3,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeOutCubic,
-      );
-    }
+    _onNavTap(3); // Foods nav index
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _foodsKey.currentState?.setTabIndex(tabIndex);
     });
@@ -248,7 +271,6 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
 
   @override
   Widget build(BuildContext context) {
-    final pad = MediaQuery.viewPaddingOf(context).bottom;
     return Scaffold(
       extendBody: true,
       resizeToAvoidBottomInset: false,
@@ -257,63 +279,22 @@ class _BottomNavScaffoldState extends State<BottomNavScaffold>
           PageView(
             controller: _pageController,
             physics: const BouncingScrollPhysics(),
-            onPageChanged: (i) => setState(() => index = i),
-            children: screens,
+            onPageChanged: (pageIdx) {
+              // Map page index back to logical nav index
+              final navIdx = [0, 2, 3][pageIdx];
+              setState(() => _navIndex = navIdx);
+            },
+            children: _pages,
           ),
           Align(
             alignment: Alignment.bottomCenter,
-            child: VisionNavBar(currentIndex: index, onItemSelected: _goTo),
-          ),
-          // Workout gate button — positioned above the nav bar on the right
-          Positioned(
-            bottom: VisionNavBar.kHeight + (pad > 0 ? pad : 8) + 12,
-            right: 20,
-            child: _WorkoutGateButton(),
+            child: VisionNavBar(
+              currentIndex: _navIndex,
+              onItemSelected: _onNavTap,
+              onLogPressed: _openQuickLog,
+            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _WorkoutGateButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final appState = context.read<AppState>();
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        appState.enterWorkoutMode();
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.cardDark,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: .30),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.fitness_center_rounded, color: AppColors.primary, size: 17),
-            const SizedBox(width: 7),
-            const Text(
-              'WORKOUT',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
